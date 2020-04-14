@@ -18,7 +18,7 @@ if __name__ == '__main__':
     video_detector = VideoDetector(model, "config/coco.names",
                                    font_path="font/sarasa-bold.ttc",
                                    font_size=18,
-                                   skip_frames=-1,
+                                   skip_frames=2,
                                    conf_thres=0.5,
                                    nms_thres=0.4,
                                    tracker=tracker)

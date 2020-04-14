@@ -73,7 +73,7 @@ class VideoDetector:
         skip_frames = int(skip_times) * video_fps
         if skip_times > total_frames:
             raise ValueError("Can't skip over total video!")
-        # vid.set(cv2.CAP_PROP_POS_FRAMES, 2500)
+        vid.set(cv2.CAP_PROP_POS_FRAMES, skip_frames)
 
         isOutput = True if output_path is not None else False
         if isOutput:

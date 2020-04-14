@@ -262,7 +262,7 @@ class Darknet(nn.Module):
                 loss += layer_loss
                 yolo_outputs.append(x)
             layer_outputs.append(x)
-        yolo_outputs = torch.cat(yolo_outputs[1:], 1)
+        yolo_outputs = torch.cat(yolo_outputs, 1)
         return yolo_outputs if targets is None else (loss, yolo_outputs)
 
     def load_darknet_weights(self, weights_path):

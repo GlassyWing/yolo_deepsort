@@ -1,10 +1,10 @@
 from setuptools import setup, find_packages
 
-setup(name='yolo3_torch',
+setup(name='yolo3_deepsort',
 
       version='0.1',
 
-      url='https://github.com/GlassyWing/yolo3_torch',
+      url='https://github.com/GlassyWing/yolo3_deepsort',
 
       license='GPL 3.0',
 
@@ -12,9 +12,9 @@ setup(name='yolo3_torch',
 
       author_email='dengjiaxim@gmail.com',
 
-      description='yolo3 base on torch',
+      description='MOT base on yolo3+deepsort',
 
-      keywords='detections,video,image,yolo3',
+      keywords='detections,video,image,yolo3,deepsort',
 
       packages=find_packages(exclude=['test', 'weights', 'config', 'data']),
 
