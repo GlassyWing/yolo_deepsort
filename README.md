@@ -46,7 +46,7 @@ python video_deepsort.py
 
 [yolo3训练参考](https://github.com/eriklindernoren/PyTorch-YOLOv3)
 
-[deepsort训练参考]([deepsort训练参考](https://github.com/ZQPei/deep_sort_pytorch))
+[deepsort训练参考](https://github.com/ZQPei/deep_sort_pytorch)
 
 ## 引用
 
