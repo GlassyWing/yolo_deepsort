@@ -1,0 +1,1 @@
+from yolo3.detect.img_detect import ImageDetector, ImageFolderDetector
