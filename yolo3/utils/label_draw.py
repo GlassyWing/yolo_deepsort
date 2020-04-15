@@ -2,6 +2,7 @@ import colorsys
 import logging
 from concurrent.futures.thread import ThreadPoolExecutor
 import random
+import cv2
 
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
@@ -17,36 +18,47 @@ def _get_statistic_info(detections, unique_labels, classes):
     return statistic_info
 
 
-def draw_rect(draw, rect, color, thickness):
+def draw_rect(img, rect, color, thickness):
     """绘制边框和标签"""
     x1, y1, x2, y2 = rect
 
     c1 = (int(x1), int(y1))
     c2 = (int(x2), int(y2))
 
-    draw.rectangle([c1, c2], outline=tuple(color) + (128,), width=thickness)
+    image = cv2.rectangle(img, c1, c2, color, thickness)
+    return image
 
 
-def draw_rect_and_label(draw, rect, label, color, thickness, font):
+def draw_rect_and_label(img, rect, label, color, thickness, font):
     """绘制边框和标签"""
     x1, y1, x2, y2 = rect
 
-    c1 = (int(x1), int(y1))
-    c2 = (int(x2), int(y2))
+    color = (int(color[0]), int(color[1]), int(color[2]))
 
-    draw.rectangle([c1, c2], outline=tuple(color) + (128,), width=thickness)
+    # 绘制边框
+    draw_rect(img, rect, color, thickness)
 
     # 绘制文本框
-    label_size = draw.textsize(label, font)
+    label_size = (int(18 * 1.1 * len(label)), 18)
 
     if y1 - label_size[1] >= 0:
         text_origin = int(x1), int(y1) - label_size[1]
     else:
         text_origin = int(x1), int(y1) + 1
-    draw.rectangle([text_origin, (text_origin[0] + label_size[0],
-                                  text_origin[1] + label_size[1])],
-                   fill=tuple(color) + (128,))
-    draw.text(xy=text_origin, text=label, fill=(255, 255, 255), font=font)
+    cv2.rectangle(img, text_origin, (text_origin[0] + label_size[0],
+                                     text_origin[1] + label_size[1]),
+                  color, -1)
+    if font is not None:
+        font.putText(img=img,
+                     text=label,
+                     org=text_origin,
+                     fontHeight=18,
+                     color=(255, 255, 255),
+                     thickness=-1,
+                     line_type=cv2.LINE_AA,
+                     bottomLeftOrigin=False)
+    else:
+        cv2.putText(img, label, text_origin, cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
 
     return label_size
 
@@ -74,54 +86,42 @@ def draw_single_img(img, detections, img_size,
     """绘制单张图片"""
     statistic_info = {}
 
+    plane = np.zeros(img.shape, np.uint8)
+
     # Detected something
     if detections is not None:
-
-        # 使用PIL绘制中文
-        base = Image.fromarray(img).convert("RGBA")
-        w, h = base.size
-
-        # 如果检测框尚未进行缩放
-        if not scaled:
-            detections = rescale_boxes(detections, img_size, (h, w))
 
         if statistic:
             unique_labels = detections[:, -1].unique()
             statistic_info = _get_statistic_info(detections, unique_labels, classes)
 
         # make a blank image for text, rectangle, initialized to transparent color
-        plane = Image.new("RGBA", base.size, (255, 255, 255, 0))
-
-        draw = ImageDraw.Draw(plane)
 
         font_height = 0
         font_width = 0
 
         for idx, detection in enumerate(detections):
             if only_rect:
-                draw_rect(draw, detection[:4], colors[int(detection[-1])], thickness)
+                draw_rect(plane, detection[:4], colors[int(detection[-1])], thickness)
 
             else:
                 # 绘制所有标签
-                fw, fh = draw_rect_and_label(draw, detection[:4],
-                                             classes[int(detection[-1])],
-                                             colors[int(detection[-1])],
-                                             thickness,
-                                             font)
+                (fw, fh) = draw_rect_and_label(plane, detection[:4],
+                                               classes[int(detection[-1])],
+                                               colors[int(detection[-1])],
+                                               thickness,
+                                               font)
                 font_height = max(font_height, fh)
                 font_width = max(font_width, fw)
 
         if not only_rect and statistic:
             # 绘制统计信息
-            draw_summary(draw, font=font,
-                         summary=statistic_info,
-                         font_width=font_width,
-                         font_height=font_height
-                         )
-        del draw
-
-        out = Image.alpha_composite(base, plane).convert("RGB")
-        img = np.ndarray(buffer=out.tobytes(), shape=img.shape, dtype='uint8', order='C')
+            # draw_summary(draw, font=font,
+            #              summary=statistic_info,
+            #              font_width=font_width,
+            #              font_height=font_height
+            #              )
+            pass
 
         return img, plane, statistic_info
 
@@ -130,7 +130,26 @@ def draw_single_img(img, detections, img_size,
         return img, None, statistic_info
 
 
+def plane_composite(img, plane):
+    """将背景层与绘制检测框的图层叠加"""
+
+    plane2gray = cv2.cvtColor(plane, cv2.COLOR_BGR2GRAY)
+
+    # 将像素值大于0的全都设为白色，为0的全都为黑色
+    _, mask = cv2.threshold(plane2gray, 0, 255, cv2.THRESH_BINARY)
+    mask_inv = cv2.bitwise_not(mask)
+
+    # 在原图中，把要添加的部分设置为黑色
+    img_bg = cv2.bitwise_and(img, img, mask=mask_inv)
+
+    # 在前景中，把不添加的部分设置为黑色
+    plane_fg = cv2.bitwise_and(plane, plane, mask=mask)
+
+    return cv2.add(img_bg, plane_fg)
+
+
 class LabelDrawer:
+    """绘制便签工具"""
 
     def __init__(self,
                  classes,
@@ -146,17 +165,15 @@ class LabelDrawer:
 
         num_classes = len(self.classes)
         if font_path is not None:
-            self.font = ImageFont.truetype(font_path, font_size)
+            self.font = cv2.freetype.createFreeType2()
+            self.font.loadFontData(fontFileName=font_path, id=0)
         else:
-            self.font = ImageFont.load_default()
+            self.font = None
 
         # Prepare colors for each class
-        hsv_color = [(1.0 * i / num_classes, 1., 1.) for i in range(num_classes)]
-        colors = [colorsys.hsv_to_rgb(*x) for x in hsv_color]
-        random.seed(0)
-        random.shuffle(colors)
-        random.seed(None)
-        self.colors = (np.random.rand(num_classes, 3) * 255).astype(int)
+        np.random.seed(1)
+        self.colors = (np.random.rand(min(999, num_classes), 3) * 255).astype(int)
+        np.random.seed(None)
 
     def draw_labels(self, img, detections, only_rect, scaled=True):
         return draw_single_img(img, detections, self.img_size, self.classes,
@@ -170,12 +187,8 @@ class LabelDrawer:
     def draw_labels_by_trackers(self, img, detections, only_rect):
         statistic_info = {}
 
-        # 使用PIL绘制中文
-        base = Image.fromarray(img).convert("RGBA")
         # make a blank image for text, rectangle, initialized to transparent color
-        plane = Image.new("RGBA", base.size, (255, 255, 255, 0))
-
-        draw = ImageDraw.Draw(plane)
+        plane = np.zeros(img.shape, np.uint8)
 
         for detection in detections:
 
@@ -183,11 +196,11 @@ class LabelDrawer:
             font_width = 0
 
             if only_rect:
-                draw_rect(draw, detection[:4], self.colors[int(detection[-1])], self.thickness)
+                draw_rect(plane, detection[:4], self.colors[int(detection[-1])], self.thickness)
 
             else:
                 # 绘制所有标签
-                fw, fh = draw_rect_and_label(draw,
+                fw, fh = draw_rect_and_label(plane,
                                              detection[:4],
                                              # str(tracker.track_id) + ":" + self.classes[int(classId)],
                                              str(int(detection[-1])),
@@ -199,14 +212,11 @@ class LabelDrawer:
 
             if self.statistic:
                 # 绘制统计信息
-                draw_summary(draw, font=self.font,
-                             summary=statistic_info,
-                             font_width=font_width,
-                             font_height=font_height
-                             )
-        del draw
-
-        out = Image.alpha_composite(base, plane).convert("RGB")
-        img = np.ndarray(buffer=out.tobytes(), shape=img.shape, dtype='uint8', order='C')
+                # draw_summary(draw, font=self.font,
+                #              summary=statistic_info,
+                #              font_width=font_width,
+                #              font_height=font_height
+                #              )
+                pass
 
         return img, plane, statistic_info

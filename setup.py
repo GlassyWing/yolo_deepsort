@@ -24,6 +24,6 @@ setup(name='yolo3_deepsort',
 
       zip_safe=False,
 
-      install_requires=['torch', 'torchvision', 'matplotlib', 'opencv-python', 'terminaltables', 'tqdm'],
+      install_requires=['torch', 'torchvision', 'matplotlib', 'terminaltables', 'tqdm'],
 
       )

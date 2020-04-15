@@ -7,7 +7,7 @@ from PIL import Image
 
 from yolo3.detect.img_detect import ImageDetector
 from yolo3.utils.helper import load_classes
-from yolo3.utils.label_draw import LabelDrawer
+from yolo3.utils.label_draw import LabelDrawer, plane_composite
 from yolo3.utils.model_build import p1p2Toxywh
 
 
@@ -122,10 +122,12 @@ class VideoDetector:
                     hold_plane = plane
                     frames = 0
                 else:
-                    if hold_plane is not None:
-                        image = alpha_composite(frame, hold_plane)
-                    else:
-                        image = frame
+                    image = frame
+
+                if hold_plane is not None:
+                    # image = cv2.addWeighted(frame, 1, hold_plane, 1, 0)
+                    image = plane_composite(frame, hold_plane)
+
                 # RGB -> BGR
                 result = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
                 # result = image
