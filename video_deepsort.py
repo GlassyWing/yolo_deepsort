@@ -8,7 +8,7 @@ if __name__ == '__main__':
     LOG_FORMAT = "%(asctime)s - %(levelname)s - %(message)s"
     logging.basicConfig(level=logging.INFO, format=LOG_FORMAT)
 
-    model = Darknet("config/yolov3.cfg", img_size=416)
+    model = Darknet("config/yolov3.cfg", img_size=512)
     model.load_darknet_weights("weights/yolov3.weights")
     model.to("cuda:0")
 
@@ -17,7 +17,7 @@ if __name__ == '__main__':
 
     video_detector = VideoDetector(model, "config/coco.names",
                                    font_path="font/sarasa-bold.ttc",
-                                   font_size=18,
+                                   font_size=12,
                                    skip_frames=2,
                                    conf_thres=0.5,
                                    nms_thres=0.4,
@@ -28,7 +28,7 @@ if __name__ == '__main__':
                                        # output_path="../data/output.ts",
                                        real_show=True,
                                        show_statistic=True,
-                                       skip_times=0):
+                                       skip_times=30):
         # if frames > 10:
         #     break
         # frames += 1

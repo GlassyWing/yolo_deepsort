@@ -13,6 +13,7 @@ class Extractor(object):
         self.net.load_state_dict(state_dict)
         print("Loading weights from {}... Done!".format(model_path))
         self.net.to(self.device)
+        self.net.eval()
         self.size = (64, 128)
         self.norm = transforms.Compose([
             transforms.ToTensor(),

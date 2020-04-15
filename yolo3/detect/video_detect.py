@@ -94,7 +94,7 @@ class VideoDetector:
                 if not return_value:
                     break
 
-                # frame = cv2.resize(frame, (640, 480))
+                frame = cv2.resize(frame, (640, 480))
 
                 # BGR -> RGB
                 frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)

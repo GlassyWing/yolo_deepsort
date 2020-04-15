@@ -29,7 +29,7 @@ def draw_rect(img, rect, color, thickness):
     return image
 
 
-def draw_rect_and_label(img, rect, label, color, thickness, font):
+def draw_rect_and_label(img, rect, label, color, thickness, font, font_size=18):
     """绘制边框和标签"""
     x1, y1, x2, y2 = rect
 
@@ -39,20 +39,20 @@ def draw_rect_and_label(img, rect, label, color, thickness, font):
     draw_rect(img, rect, color, thickness)
 
     # 绘制文本框
-    label_size = (int(18 * 1.1 * len(label)), 18)
+    label_size = (int(font_size * 1.1 * len(label)), font_size)
 
     if y1 - label_size[1] >= 0:
         text_origin = int(x1), int(y1) - label_size[1]
     else:
         text_origin = int(x1), int(y1) + 1
-    cv2.rectangle(img, text_origin, (text_origin[0] + label_size[0],
-                                     text_origin[1] + label_size[1]),
-                  color, -1)
+    # cv2.rectangle(img, text_origin, (text_origin[0] + label_size[0],
+    #                                  text_origin[1] + label_size[1]),
+    #               color, -1)
     if font is not None:
         font.putText(img=img,
                      text=label,
                      org=text_origin,
-                     fontHeight=18,
+                     fontHeight=font_size,
                      color=(255, 255, 255),
                      thickness=-1,
                      line_type=cv2.LINE_AA,
@@ -82,7 +82,8 @@ def draw_single_img(img, detections, img_size,
                     thickness, font,
                     statistic=False,
                     scaled=False,
-                    only_rect=False):
+                    only_rect=False,
+                    font_size=18):
     """绘制单张图片"""
     statistic_info = {}
 
@@ -110,7 +111,8 @@ def draw_single_img(img, detections, img_size,
                                                classes[int(detection[-1])],
                                                colors[int(detection[-1])],
                                                thickness,
-                                               font)
+                                               font,
+                                               font_size)
                 font_height = max(font_height, fh)
                 font_width = max(font_width, fw)
 
@@ -162,6 +164,7 @@ class LabelDrawer:
         self.statistic = statistic
         self.classes = classes
         self.img_size = img_size
+        self.font_size = font_size
 
         num_classes = len(self.classes)
         if font_path is not None:
@@ -182,7 +185,8 @@ class LabelDrawer:
                                self.font,
                                statistic=self.statistic,
                                scaled=scaled,
-                               only_rect=only_rect)
+                               only_rect=only_rect,
+                               font_size= self.font_size)
 
     def draw_labels_by_trackers(self, img, detections, only_rect):
         statistic_info = {}
@@ -206,7 +210,8 @@ class LabelDrawer:
                                              str(int(detection[-1])),
                                              self.colors[int(detection[-1]) % len(self.colors)],
                                              self.thickness,
-                                             self.font)
+                                             self.font,
+                                             font_size=self.font_size)
                 font_height = max(font_height, fh)
                 font_width = max(font_width, fw)
 
