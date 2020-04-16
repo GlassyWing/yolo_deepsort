@@ -13,7 +13,6 @@ if __name__ == '__main__':
     model.to("cuda:0")
 
     tracker = DeepSort("weights/ckpt.t7", min_confidence=0.5, nms_max_overlap=0.4)
-    # tracker = Sort(max_age=30)
 
     video_detector = VideoDetector(model, "config/coco.names",
                                    font_path="font/sarasa-bold.ttc",

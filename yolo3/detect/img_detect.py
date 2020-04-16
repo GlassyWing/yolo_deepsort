@@ -1,22 +1,20 @@
-import colorsys
 import datetime
 import logging
 import os
 import random
 import time
-from concurrent.futures import ThreadPoolExecutor
 
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torchvision.transforms as transforms
-from PIL import Image, ImageFont, ImageDraw
+from PIL import Image
 from matplotlib import patches
 from matplotlib.ticker import NullLocator
 from torch.autograd import Variable
 
-from yolo3.dataset.dataset import pad_to_square, resize
+from yolo3.dataset.dataset import pad_to_square
 from yolo3.utils.helper import load_classes
 from yolo3.utils.model_build import non_max_suppression, rescale_boxes
 
@@ -34,20 +32,26 @@ class ImageDetector:
         self.thickness = thickness
         self.conf_thres = conf_thres
         self.nms_thres = nms_thres
+        self.__to_tensor = transforms.ToTensor()
 
     def detect(self, img):
 
         Tensor = torch.cuda.FloatTensor if torch.cuda.is_available() else torch.FloatTensor
 
-        image = transforms.ToTensor()(img)
-        image = Variable(image.type(Tensor))
+        # 按比例缩放
+        h, w, _ = img.shape
+        if w > h:
+            img = cv2.resize(img, (self.model.img_size, int(h * self.model.img_size / w)))
+        else:
+            img = cv2.resize(img, (int(w * self.model.img_size / h), self.model.img_size))
+
+        image = self.__to_tensor(img).type(Tensor)
 
         if len(image.shape) != 3:
             image = image.unsqueeze(0)
             image = image.expand((3, image.shape[1:]))
 
         image, _ = pad_to_square(image, 0)
-        image = resize(image, self.model.img_size)
 
         # Add batch dimension
         image = image.unsqueeze(0)
@@ -62,7 +66,6 @@ class ImageDetector:
         inference_time = datetime.timedelta(seconds=current_time - prev_time)
         logging.info("\t Inference time: %s" % inference_time)
 
-        w, h = img.shape[1], img.shape[0]
         if detections is not None:
             detections = rescale_boxes(detections, self.model.img_size, (h, w))
 
