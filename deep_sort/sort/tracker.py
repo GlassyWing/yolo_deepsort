@@ -70,8 +70,12 @@ class Tracker:
 
         # Update track set.
         for track_idx, detection_idx in matches:
-            self.tracks[track_idx].update(
+            track = self.tracks[track_idx]
+            detection = detections[detection_idx]
+            track.update(
                 self.kf, detections[detection_idx])
+            # update payload info
+            track.payload = detection.payload
         for track_idx in unmatched_tracks:
             self.tracks[track_idx].mark_missed()
         for detection_idx in unmatched_detections:
@@ -134,5 +138,5 @@ class Tracker:
         mean, covariance = self.kf.initiate(detection.to_xyah())
         self.tracks.append(Track(
             mean, covariance, self._next_id, self.n_init, self.max_age,
-            detection.feature))
+            detection.feature, detection.payload))
         self._next_id += 1

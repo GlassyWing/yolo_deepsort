@@ -12,18 +12,18 @@ if __name__ == '__main__':
     model.load_darknet_weights("weights/yolov3.weights")
     model.to("cuda:0")
 
-    tracker = DeepSort("weights/ckpt.t7", min_confidence=0.5, nms_max_overlap=0.4)
+    tracker = DeepSort("weights/ckpt.t7", min_confidence=0.5, nms_max_overlap=1)
 
     video_detector = VideoDetector(model, "config/coco.names",
                                    font_path="font/sarasa-bold.ttc",
                                    font_size=12,
                                    skip_frames=2,
                                    conf_thres=0.5,
-                                   nms_thres=0.4,
+                                   nms_thres=0.2,
                                    tracker=tracker)
 
     frames = 0
-    for image in video_detector.detect("E:/python/data/toky.mp4",
+    for image in video_detector.detect("E:/python/data/car.flv",
                                        # output_path="../data/output.ts",
                                        real_show=True,
                                        show_statistic=True,

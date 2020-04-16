@@ -200,14 +200,14 @@ class LabelDrawer:
             font_width = 0
 
             if only_rect:
-                draw_rect(plane, detection[:4], self.colors[int(detection[-1])], self.thickness)
+                draw_rect(plane, detection[:4], self.colors[int(detection[4])], self.thickness)
 
             else:
                 # 绘制所有标签
                 fw, fh = draw_rect_and_label(plane,
                                              detection[:4],
                                              # str(tracker.track_id) + ":" + self.classes[int(classId)],
-                                             str(int(detection[-1])),
+                                             str(int(detection[4])) + ":" + self.classes[int(detection[-1])],
                                              self.colors[int(detection[-1]) % len(self.colors)],
                                              self.thickness,
                                              self.font,
