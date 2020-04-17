@@ -108,6 +108,7 @@ class VideoDetector:
 
                         boxs = boxs[mask]
                         confidences = confidences[mask]
+                        class_ids = class_ids[mask]
 
                         detections = self.tracker.update(boxs.cpu(), confidences, frame, class_ids)
                         image, plane, statistic_infos = self.label_drawer.draw_labels_by_trackers(frame, detections,

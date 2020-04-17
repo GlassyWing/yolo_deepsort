@@ -57,13 +57,12 @@ class ImageDetector:
             detections = self.model(image)
             detections = non_max_suppression(detections, self.conf_thres, self.nms_thres)
             detections = detections[0]
+            if detections is not None:
+                detections = rescale_boxes(detections, self.model.img_size, (h, w))
 
         current_time = time.time()
         inference_time = datetime.timedelta(seconds=current_time - prev_time)
         logging.info("\t Inference time: %s" % inference_time)
-
-        if detections is not None:
-            detections = rescale_boxes(detections, self.model.img_size, (h, w))
 
         return detections
 

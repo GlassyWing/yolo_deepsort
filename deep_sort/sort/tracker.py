@@ -75,7 +75,8 @@ class Tracker:
             track.update(
                 self.kf, detections[detection_idx])
             # update payload info
-            track.payload = detection.payload
+            if track.payload is None:
+                track.payload = detection.payload
         for track_idx in unmatched_tracks:
             self.tracks[track_idx].mark_missed()
         for detection_idx in unmatched_detections:
