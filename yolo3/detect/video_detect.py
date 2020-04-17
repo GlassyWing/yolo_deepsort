@@ -94,8 +94,6 @@ class VideoDetector:
                 if not return_value:
                     break
 
-                # frame = cv2.resize(frame, (640, 480))
-
                 # BGR -> RGB
                 frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 if frames % self.skip_frames == 0:
@@ -106,7 +104,7 @@ class VideoDetector:
                         boxs = p1p2Toxywh(detections[:, :4])
                         class_ids = detections[:, -1]
                         confidences = detections[:, 4]
-                        mask = (class_ids == 0) | (class_ids == 2)
+                        mask = (class_ids == 0) | (class_ids == 4) | (class_ids == 2)
 
                         boxs = boxs[mask]
                         confidences = confidences[mask]

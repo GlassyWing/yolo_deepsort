@@ -4,17 +4,15 @@ import os
 import random
 import time
 
-import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
-import torchvision.transforms as transforms
 from PIL import Image
 from matplotlib import patches
 from matplotlib.ticker import NullLocator
 from torch.autograd import Variable
 
-from yolo3.dataset.dataset import pad_to_square
+from yolo3.dataset.dataset import pad_to_square, resize
 from yolo3.utils.helper import load_classes
 from yolo3.utils.model_build import non_max_suppression, rescale_boxes
 
@@ -32,20 +30,18 @@ class ImageDetector:
         self.thickness = thickness
         self.conf_thres = conf_thres
         self.nms_thres = nms_thres
-        self.__to_tensor = transforms.ToTensor()
 
     def detect(self, img):
 
-        Tensor = torch.cuda.FloatTensor if torch.cuda.is_available() else torch.FloatTensor
+        image = torch.from_numpy(img).to(device="cuda:0" if torch.cuda.is_available() else "cpu")
+        image = image.permute((2, 0, 1)) / 255.
 
         # 按比例缩放
         h, w, _ = img.shape
         if w > h:
-            img = cv2.resize(img, (self.model.img_size, int(h * self.model.img_size / w)))
+            image = resize(image, (int(h * self.model.img_size / w), self.model.img_size))
         else:
-            img = cv2.resize(img, (int(w * self.model.img_size / h), self.model.img_size))
-
-        image = self.__to_tensor(img).type(Tensor)
+            image = resize(image, (self.model.img_size, int(w * self.model.img_size / h)))
 
         if len(image.shape) != 3:
             image = image.unsqueeze(0)

@@ -1,13 +1,8 @@
-import colorsys
 import logging
 from concurrent.futures.thread import ThreadPoolExecutor
-import random
+
 import cv2
-
 import numpy as np
-from PIL import Image, ImageDraw, ImageFont
-
-from yolo3.utils.model_build import rescale_boxes
 
 
 def _get_statistic_info(detections, unique_labels, classes):
@@ -186,7 +181,7 @@ class LabelDrawer:
                                statistic=self.statistic,
                                scaled=scaled,
                                only_rect=only_rect,
-                               font_size= self.font_size)
+                               font_size=self.font_size)
 
     def draw_labels_by_trackers(self, img, detections, only_rect):
         statistic_info = {}
