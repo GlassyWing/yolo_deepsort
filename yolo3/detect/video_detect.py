@@ -118,10 +118,12 @@ class VideoDetector:
                         image, plane, statistic_infos = self.label_drawer.draw_labels(frame, detections,
                                                                                       only_rect=False)
 
+                    hold_detections = detections
                     hold_plane = plane
                     frames = 0
                 else:
                     image = frame
+                    hold_detections = None
 
                 if hold_plane is not None:
                     # image = cv2.addWeighted(frame, 1, hold_plane, 1, 0)
@@ -155,7 +157,7 @@ class VideoDetector:
 
                 if isOutput:
                     out.write(result)
-                yield result
+                yield result, hold_detections
                 if cv2.waitKey(1) & 0xFF == ord('q'):
                     break
         finally:

@@ -1,5 +1,9 @@
+import datetime
 import logging
+import time
 
+from action.action_Identify import ActionIdentify
+from action.actions import TakeOff, Landing, Glide
 from deep_sort import DeepSort
 from yolo3.detect.video_detect import VideoDetector
 from yolo3.models import Darknet
@@ -22,13 +26,14 @@ if __name__ == '__main__':
                                    nms_thres=0.2,
                                    tracker=tracker)
 
+    action_id = ActionIdentify(actions=[TakeOff(delta=4), Landing(delta=0), Glide(delta=4)], max_size=8)
+
     frames = 0
-    for image in video_detector.detect("E:/python/data/car.flv",
-                                       # output_path="../data/output.ts",
-                                       real_show=True,
-                                       show_statistic=True,
-                                       skip_times=30):
-        # if frames > 10:
-        #     break
-        # frames += 1
-        pass
+    for image, detections in video_detector.detect("E:/projects/python/data/landing.flv",
+                                                   # output_path="../data/output.ts",
+                                                   real_show=True,
+                                                   show_statistic=True,
+                                                   skip_times=55):
+
+        # 检测动作
+        action_id.update(detections)
