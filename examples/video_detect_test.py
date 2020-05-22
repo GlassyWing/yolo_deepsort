@@ -30,7 +30,7 @@ if __name__ == '__main__':
                                        # output_path="../data/output.ts",
                                        real_show=True,
                                        show_statistic=True,
-                                       skip_times=0):
+                                       skip_secs=0):
         # if frames > 10:
         #     break
         # frames += 1

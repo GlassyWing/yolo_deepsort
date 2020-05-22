@@ -55,10 +55,9 @@ class VideoDetector:
 
     def detect(self, video_path,
                output_path=None,
-               skip_times=0,
+               skip_secs=0,
                real_show=False,
                show_fps=True,
-               show_statistic=False,
                ):
         logging.info("Detect video: " + video_path)
         vid = cv2.VideoCapture(video_path)
@@ -70,8 +69,8 @@ class VideoDetector:
                       int(vid.get(cv2.CAP_PROP_FRAME_HEIGHT)))
 
         total_frames = int(vid.get(cv2.CAP_PROP_FRAME_COUNT))
-        skip_frames = int(skip_times) * video_fps
-        if skip_times > total_frames:
+        skip_frames = int(skip_secs) * video_fps
+        if skip_secs > total_frames:
             raise ValueError("Can't skip over total video!")
         vid.set(cv2.CAP_PROP_POS_FRAMES, skip_frames)
 
