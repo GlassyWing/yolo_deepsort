@@ -40,7 +40,7 @@ python video_deepsort.py
 
 ## 示例
 
-<img src="assets/people_track.gif">
+<img src="assets/track.gif">
 
 ## 训练
 
