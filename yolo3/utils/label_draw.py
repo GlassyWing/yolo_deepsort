@@ -1,5 +1,4 @@
 import logging
-from concurrent.futures.thread import ThreadPoolExecutor
 
 import cv2
 import numpy as np
@@ -58,19 +57,6 @@ def draw_rect_and_label(img, rect, label, color, thickness, font, font_size=18):
     return label_size
 
 
-def draw_summary(draw, font, summary, font_width, font_height, y_offset=60):
-    """绘制摘要信息"""
-    draw.rectangle(xy=((0, y_offset), (font_width, font_height * len(summary) + y_offset)),
-                   fill=(0, 0, 0, 128))
-
-    with ThreadPoolExecutor() as executor:
-        for _ in executor.map(
-                lambda x: draw.text((3, x[0] * font_height + y_offset), x[1][0] + ":" + str(x[1][1]),
-                                    fill=(255, 255, 255, 128),
-                                    font=font), enumerate(summary.items())):
-            pass
-
-
 def draw_single_img(img, detections, img_size,
                     classes,
                     colors,
@@ -81,8 +67,6 @@ def draw_single_img(img, detections, img_size,
                     font_size=18):
     """绘制单张图片"""
     statistic_info = {}
-
-    plane = np.zeros(img.shape, np.uint8)
 
     # Detected something
     if detections is not None:
@@ -98,11 +82,11 @@ def draw_single_img(img, detections, img_size,
 
         for idx, detection in enumerate(detections):
             if only_rect:
-                draw_rect(plane, detection[:4], colors[int(detection[-1])], thickness)
+                draw_rect(img, detection[:4], colors[int(detection[-1])], thickness)
 
             else:
                 # 绘制所有标签
-                (fw, fh) = draw_rect_and_label(plane, detection[:4],
+                (fw, fh) = draw_rect_and_label(img, detection[:4],
                                                classes[int(detection[-1])],
                                                colors[int(detection[-1])],
                                                thickness,
@@ -113,14 +97,9 @@ def draw_single_img(img, detections, img_size,
 
         if not only_rect and statistic:
             # 绘制统计信息
-            # draw_summary(draw, font=font,
-            #              summary=statistic_info,
-            #              font_width=font_width,
-            #              font_height=font_height
-            #              )
             pass
 
-        return img, plane, statistic_info
+        return img, None, statistic_info
 
     else:
         logging.debug("Nothing Detected.")
@@ -154,12 +133,15 @@ class LabelDrawer:
                  font_size,
                  thickness,
                  img_size,
-                 statistic=False):
+                 statistic=False,
+                 id2label=None):
         self.thickness = thickness
         self.statistic = statistic
         self.classes = classes
         self.img_size = img_size
         self.font_size = font_size
+        self.id2label = id2label
+        self.font_path = font_path
 
         num_classes = len(self.classes)
         if font_path is not None:
@@ -172,6 +154,10 @@ class LabelDrawer:
         np.random.seed(1)
         self.colors = (np.random.rand(min(999, num_classes), 3) * 255).astype(int)
         np.random.seed(None)
+
+    def clone(self):
+        return LabelDrawer(self.classes, self.font_path, self.font_size, self.thickness,
+                           self.img_size, self.statistic, None)
 
     def draw_labels(self, img, detections, only_rect, scaled=True):
         return draw_single_img(img, detections, self.img_size, self.classes,
@@ -186,23 +172,25 @@ class LabelDrawer:
     def draw_labels_by_trackers(self, img, detections, only_rect):
         statistic_info = {}
 
-        # make a blank image for text, rectangle, initialized to transparent color
-        plane = np.zeros(img.shape, np.uint8)
-
         for detection in detections:
 
             font_height = 0
             font_width = 0
 
             if only_rect:
-                draw_rect(plane, detection[:4], self.colors[int(detection[4])], self.thickness)
+                draw_rect(img, detection[:4], self.colors[int(detection[4])], self.thickness)
 
             else:
+
+                if self.id2label is not None and str(int(detection[4])) in self.id2label:
+                    label = str(int(detection[4])) + ":" + self.id2label[str(int(detection[4]))]
+                else:
+                    label = str(int(detection[4])) + ":" + self.classes[int(detection[-1])]
+
                 # 绘制所有标签
-                fw, fh = draw_rect_and_label(plane,
+                fw, fh = draw_rect_and_label(img,
                                              detection[:4],
-                                             # str(tracker.track_id) + ":" + self.classes[int(classId)],
-                                             str(int(detection[4])) + ":" + self.classes[int(detection[-1])],
+                                             label,
                                              self.colors[int(detection[-1]) % len(self.colors)],
                                              self.thickness,
                                              self.font,
@@ -211,12 +199,6 @@ class LabelDrawer:
                 font_width = max(font_width, fw)
 
             if self.statistic:
-                # 绘制统计信息
-                # draw_summary(draw, font=self.font,
-                #              summary=statistic_info,
-                #              font_width=font_width,
-                #              font_height=font_height
-                #              )
                 pass
 
-        return img, plane, statistic_info
+        return img, None, statistic_info

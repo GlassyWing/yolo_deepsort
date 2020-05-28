@@ -1,4 +1,5 @@
 from collections import deque
+import time
 
 
 class Orbit:
@@ -8,6 +9,7 @@ class Orbit:
         self.track_id = track_id
         self.class_id = class_id
         self.deque = deque(maxlen=max_age)
+        self.timestamps = deque(maxlen=max_age)
         self.age = 0
 
     @staticmethod
@@ -20,4 +22,5 @@ class Orbit:
     def update(self, detection):
         self.age = 0
         self.deque.append(Orbit._center_point(detection[:4]))
+        self.timestamps.append(time.time())
 

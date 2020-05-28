@@ -9,6 +9,9 @@ class ActionIdentify:
         self.max_size = max_size
         self.actions = actions
 
+    def clone(self):
+        return ActionIdentify(self.actions, self.max_age, self.max_size)
+
     def update(self, detections):
         if detections is None:
             return
@@ -33,10 +36,13 @@ class ActionIdentify:
         for track_id in to_be_del:
             del self.cache[track_id]
 
+        actions = []
         # 识别动作
         for track_id, orbit in self.cache.items():
-            if orbit.age < self.max_size:
+            if orbit.age == 0:
                 for action in self.actions:
                     if action.confirm(orbit):
-                        return track_id, action.name
-                        break
+                        actions.append((track_id, orbit.class_id, action.name))
+
+        return actions
+

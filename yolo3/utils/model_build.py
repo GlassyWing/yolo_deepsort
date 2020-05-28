@@ -15,10 +15,10 @@ def rescale_boxes(boxes, current_dim, original_shape):
     pad_x = max(current_dim - scaled_w, 0)
 
     # Rescale bounding boxes to dimension of original image
-    boxes[:, 0] = (boxes[:, 0] - pad_x // 2) / scale
-    boxes[:, 1] = (boxes[:, 1] - pad_y // 2) / scale
-    boxes[:, 2] = (boxes[:, 2] - pad_x // 2) / scale
-    boxes[:, 3] = (boxes[:, 3] - pad_y // 2) / scale
+    boxes[..., 0] = (boxes[..., 0] - pad_x // 2) / scale
+    boxes[..., 1] = (boxes[..., 1] - pad_y // 2) / scale
+    boxes[..., 2] = (boxes[..., 2] - pad_x // 2) / scale
+    boxes[..., 3] = (boxes[..., 3] - pad_y // 2) / scale
 
     #  FOR CASE: 1st pad; 2nd resize
     # orig_h, orig_w = original_shape
@@ -36,7 +36,7 @@ def rescale_boxes(boxes, current_dim, original_shape):
     return boxes
 
 
-def non_max_suppression(prediction, conf_thres=0.5, nms_thres=0.4):
+def non_max_suppression(prediction, conf_thres=0.5, nms_thres=0.4, is_p1p2=False):
     """
     Removes detections with lower object confidence score than 'conf_thres' and performs
     Non-Maximum Suppression to further filter detections.
@@ -46,7 +46,8 @@ def non_max_suppression(prediction, conf_thres=0.5, nms_thres=0.4):
     :param nms_thres:
     :return: detections with shape (x1, y1, x2, y2, object_conf, class_score, class_pred)
     """
-    prediction[..., :4] = xywh2p1p2(prediction[..., :4])
+    if not is_p1p2:
+        prediction[..., :4] = xywh2p1p2(prediction[..., :4])
     output = [None for _ in range(len(prediction))]
     for image_i, image_pred in enumerate(prediction):
         image_pred = image_pred[image_pred[:, 4] >= conf_thres]

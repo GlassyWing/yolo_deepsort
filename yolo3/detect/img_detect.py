@@ -14,7 +14,21 @@ from torch.autograd import Variable
 
 from yolo3.dataset.dataset import pad_to_square, resize
 from yolo3.utils.helper import load_classes
-from yolo3.utils.model_build import non_max_suppression, rescale_boxes
+from yolo3.utils.model_build import non_max_suppression, rescale_boxes, xywh2p1p2
+
+
+def scale(image, shape, max_size):
+    h, w, _ = shape
+    # 按比例缩放
+    if w > h:
+        image = resize(image, (int(h * max_size / w), max_size))
+    else:
+        image = resize(image, (max_size, int(w * max_size / h)))
+
+    if len(image.shape) != 3:
+        image = image.unsqueeze(0)
+        image = image.expand((3, image.shape[1:]))
+    return image
 
 
 class ImageDetector:
@@ -22,7 +36,9 @@ class ImageDetector:
 
     def __init__(self, model, class_path, thickness=2,
                  conf_thres=0.5,
-                 nms_thres=0.4):
+                 nms_thres=0.4,
+                 win_size=None,
+                 overlap=0.15):
         self.model = model
         self.model.eval()
         self.classes = load_classes(class_path)
@@ -30,39 +46,80 @@ class ImageDetector:
         self.thickness = thickness
         self.conf_thres = conf_thres
         self.nms_thres = nms_thres
+        self.win_size = win_size
+        self.overlap = overlap
 
     def detect(self, img):
 
         image = torch.from_numpy(img).to(device="cuda:0" if torch.cuda.is_available() else "cpu")
         image = image.permute((2, 0, 1)) / 255.
 
-        # 按比例缩放
         h, w, _ = img.shape
-        if w > h:
-            image = resize(image, (int(h * self.model.img_size / w), self.model.img_size))
-        else:
-            image = resize(image, (self.model.img_size, int(w * self.model.img_size / h)))
 
-        if len(image.shape) != 3:
+        if self.win_size is not None:
+            win_width, win_height = self.win_size
+
+        if self.win_size is None or w < win_width and h < win_height:
+
+            image = scale(image, img.shape, self.model.img_size)
+            image, _ = pad_to_square(image, 0)
+
+            # Add batch dimension
             image = image.unsqueeze(0)
-            image = image.expand((3, image.shape[1:]))
 
-        image, _ = pad_to_square(image, 0)
+            prev_time = time.time()
+            with torch.no_grad():
+                detections = self.model(image)
+                detections = non_max_suppression(detections, self.conf_thres, self.nms_thres)
+                detections = detections[0]
+                if detections is not None:
+                    detections = rescale_boxes(detections, self.model.img_size, (h, w))
 
-        # Add batch dimension
-        image = image.unsqueeze(0)
+            current_time = time.time()
+            inference_time = datetime.timedelta(seconds=current_time - prev_time)
+            logging.info("\t Inference time: %s" % inference_time)
 
-        prev_time = time.time()
-        with torch.no_grad():
-            detections = self.model(image)
-            detections = non_max_suppression(detections, self.conf_thres, self.nms_thres)
-            detections = detections[0]
-            if detections is not None:
-                detections = rescale_boxes(detections, self.model.img_size, (h, w))
+        else:
+            truncated_images = []
+            truncated_images_ori_size = []
 
-        current_time = time.time()
-        inference_time = datetime.timedelta(seconds=current_time - prev_time)
-        logging.info("\t Inference time: %s" % inference_time)
+            overlap_x, overlap_y = int(win_width * self.overlap), int(win_height * self.overlap)
+            offsets = []
+            for x in range(0, w, win_width):
+                for y in range(0, h, win_height):
+                    # 截取窗口大小的图像，再加上一些重叠区域
+                    img = image[:, y:y + win_height + overlap_y, x:x + win_width + overlap_x]
+                    truncated_images_ori_size.append((img.shape[1], img.shape[2]))
+                    img = scale(img, (img.shape[1], img.shape[2], img.shape[0]), self.model.img_size)
+                    img, _ = pad_to_square(img, 0)
+                    # cv2.imshow(str(x) + "-" + str(y), img.permute((1, 2, 0)).numpy())
+
+                    truncated_images.append(img)
+
+                    offsets.append(torch.tensor([x, y, x, y], dtype=torch.float32, device=image.device))
+
+            # (n, model.img_size, model.img_size)
+            truncated_images = torch.stack(truncated_images, 0)
+            prev_time = time.time()
+            with torch.no_grad():
+                detections = self.model(truncated_images)
+                detections[..., :4] = xywh2p1p2(detections[..., :4])
+
+                rescaled_detections = []
+                for idx, detection in enumerate(detections):
+                    detection = rescale_boxes(detection, self.model.img_size, truncated_images_ori_size[idx])
+                    detection[..., :4] += offsets[idx]
+                    rescaled_detections.append(detection)
+
+                # (1, n, 5 + num_class)
+                rescaled_detections = torch.cat(rescaled_detections, 0).unsqueeze(0)
+
+                detections = non_max_suppression(rescaled_detections, self.conf_thres, self.nms_thres, is_p1p2=True)
+                detections = detections[0]
+
+            current_time = time.time()
+            inference_time = datetime.timedelta(seconds=current_time - prev_time)
+            logging.info("\t Inference time: %s" % inference_time)
 
         return detections
 

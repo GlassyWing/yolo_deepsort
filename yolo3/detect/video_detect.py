@@ -1,5 +1,6 @@
 import logging
 import time
+from functools import reduce
 
 import cv2
 import numpy as np
@@ -7,7 +8,7 @@ from PIL import Image
 
 from yolo3.detect.img_detect import ImageDetector
 from yolo3.utils.helper import load_classes
-from yolo3.utils.label_draw import LabelDrawer, plane_composite
+from yolo3.utils.label_draw import LabelDrawer
 from yolo3.utils.model_build import p1p2Toxywh
 
 
@@ -35,9 +36,14 @@ class VideoDetector:
                  nms_thres=0.4,
                  skip_frames=-1,
                  fourcc=cv2.VideoWriter_fourcc('m', 'p', '4', 'v'),
-                 tracker=None):
+                 class_mask=None,
+                 win_size=None,
+                 overlap=0.15,
+                 tracker=None,
+                 action_id=None):
         self.thickness = thickness
         self.skip_frames = skip_frames
+        self.class_mask = class_mask
         self.fourcc = fourcc
 
         self.label_drawer = LabelDrawer(load_classes(class_path),
@@ -49,17 +55,21 @@ class VideoDetector:
         self.image_detector = ImageDetector(model, class_path,
                                             thickness=thickness,
                                             conf_thres=conf_thres,
-                                            nms_thres=nms_thres)
+                                            nms_thres=nms_thres,
+                                            win_size=win_size,
+                                            overlap=overlap)
 
         self.tracker = tracker
+        self.action_id = action_id
 
     def detect(self, video_path,
                output_path=None,
                skip_secs=0,
                real_show=False,
                show_fps=True,
+               show_statistic=False,
                ):
-        logging.info("Detect video: " + video_path)
+        logging.info("Detect video: " + str(video_path))
         vid = cv2.VideoCapture(video_path)
         if not vid.isOpened():
             raise IOError("Couldn't open webcam or video")
@@ -71,8 +81,9 @@ class VideoDetector:
         total_frames = int(vid.get(cv2.CAP_PROP_FRAME_COUNT))
         skip_frames = int(skip_secs) * video_fps
         if skip_secs > total_frames:
-            raise ValueError("Can't skip over total video!")
-        vid.set(cv2.CAP_PROP_POS_FRAMES, skip_frames)
+            print("Can't skip over total video!")
+        else:
+            vid.set(cv2.CAP_PROP_POS_FRAMES, skip_frames)
 
         isOutput = True if output_path is not None else False
         if isOutput:
@@ -83,15 +94,18 @@ class VideoDetector:
         fps = "FPS: ??"
         prev_time = time.time()
 
-        hold_plane = None
+        hold_detections = None
+        actions = []
 
         frames = 0
         try:
-            while vid.grab():
+            while True:
 
-                return_value, frame = vid.retrieve()
+                return_value, frame = vid.read()
                 if not return_value:
                     break
+
+                # frame = cv2.resize(frame, (640, 480))
 
                 # BGR -> RGB
                 frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -99,34 +113,38 @@ class VideoDetector:
                     detections = self.image_detector.detect(frame)
 
                     if detections is not None and self.tracker is not None:
-
                         boxs = p1p2Toxywh(detections[:, :4])
                         class_ids = detections[:, -1]
                         confidences = detections[:, 4]
-                        mask = (class_ids == 0) | (class_ids == 4) | (class_ids == 2)
+                        if self.class_mask is not None:
+                            mask_set = [class_ids == mask_id for mask_id in self.class_mask]
+                            mask = reduce(lambda a, b: a | b, mask_set)
 
-                        boxs = boxs[mask]
-                        confidences = confidences[mask]
-                        class_ids = class_ids[mask]
+                            boxs = boxs[mask]
+                            confidences = confidences[mask]
+                            class_ids = class_ids[mask]
 
                         detections = self.tracker.update(boxs.cpu(), confidences, frame, class_ids)
-                        image, plane, statistic_infos = self.label_drawer.draw_labels_by_trackers(frame, detections,
-                                                                                                  only_rect=False)
-                    else:
 
-                        image, plane, statistic_infos = self.label_drawer.draw_labels(frame, detections,
-                                                                                      only_rect=False)
+                        if self.action_id is not None:
+                            actions = self.action_id.update(detections)
+                        else:
+                            actions = []
 
                     hold_detections = detections
-                    hold_plane = plane
                     frames = 0
                 else:
-                    image = frame
-                    hold_detections = None
+                    actions = []
 
-                if hold_plane is not None:
-                    # image = cv2.addWeighted(frame, 1, hold_plane, 1, 0)
-                    image = plane_composite(frame, hold_plane)
+                if hold_detections is None:
+                    image = frame
+                else:
+                    if self.tracker is not None:
+                        image, _, statistic_infos = self.label_drawer.draw_labels_by_trackers(frame, hold_detections,
+                                                                                              only_rect=False)
+                    else:
+                        image, _, statistic_infos = self.label_drawer.draw_labels(frame, hold_detections,
+                                                                                  only_rect=False)
 
                 # RGB -> BGR
                 result = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
@@ -156,10 +174,13 @@ class VideoDetector:
 
                 if isOutput:
                     out.write(result)
-                yield result, hold_detections
-                if cv2.waitKey(1) & 0xFF == ord('q'):
-                    break
+                yield result, hold_detections, actions
+
+                if real_show:
+                    if cv2.waitKey(1) & 0xFF == ord('q'):
+                        break
         finally:
             if isOutput:
                 out.release()
-            cv2.destroyAllWindows()
+            if real_show:
+                cv2.destroyAllWindows()
