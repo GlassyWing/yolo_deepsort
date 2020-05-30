@@ -69,6 +69,7 @@ def draw_single_img(img, detections, img_size,
     statistic_info = {}
 
     # Detected something
+    plane = np.zeros_like(img)
     if detections is not None:
 
         if statistic:
@@ -82,11 +83,11 @@ def draw_single_img(img, detections, img_size,
 
         for idx, detection in enumerate(detections):
             if only_rect:
-                draw_rect(img, detection[:4], colors[int(detection[-1])], thickness)
+                draw_rect(plane, detection[:4], colors[int(detection[-1])], thickness)
 
             else:
                 # 绘制所有标签
-                (fw, fh) = draw_rect_and_label(img, detection[:4],
+                (fw, fh) = draw_rect_and_label(plane, detection[:4],
                                                classes[int(detection[-1])],
                                                colors[int(detection[-1])],
                                                thickness,
@@ -99,29 +100,28 @@ def draw_single_img(img, detections, img_size,
             # 绘制统计信息
             pass
 
-        return img, None, statistic_info
+        if len(detections) > 0:
+            plane2gray = cv2.cvtColor(plane, cv2.COLOR_BGR2GRAY)
+
+            # 将像素值大于0的全都设为黑色，为0的全都为白色
+            _, mask_inv = cv2.threshold(plane2gray, 0, 255, cv2.THRESH_BINARY_INV)
+        else:
+            mask_inv = None
+
+        return img, plane, mask_inv
 
     else:
         logging.debug("Nothing Detected.")
-        return img, None, statistic_info
+        return img, None, None
 
 
-def plane_composite(img, plane):
+def plane_composite(img, plane, plane_mask):
     """将背景层与绘制检测框的图层叠加"""
 
-    plane2gray = cv2.cvtColor(plane, cv2.COLOR_BGR2GRAY)
-
-    # 将像素值大于0的全都设为白色，为0的全都为黑色
-    _, mask = cv2.threshold(plane2gray, 0, 255, cv2.THRESH_BINARY)
-    mask_inv = cv2.bitwise_not(mask)
-
     # 在原图中，把要添加的部分设置为黑色
-    img_bg = cv2.bitwise_and(img, img, mask=mask_inv)
+    img_bg = cv2.bitwise_and(img, img, mask=plane_mask)
 
-    # 在前景中，把不添加的部分设置为黑色
-    plane_fg = cv2.bitwise_and(plane, plane, mask=mask)
-
-    return cv2.add(img_bg, plane_fg)
+    return cv2.add(img_bg, plane)
 
 
 class LabelDrawer:
@@ -172,13 +172,14 @@ class LabelDrawer:
     def draw_labels_by_trackers(self, img, detections, only_rect):
         statistic_info = {}
 
+        plane = np.zeros_like(img)
         for detection in detections:
 
             font_height = 0
             font_width = 0
 
             if only_rect:
-                draw_rect(img, detection[:4], self.colors[int(detection[4])], self.thickness)
+                draw_rect(plane, detection[:4], self.colors[int(detection[4])], self.thickness)
 
             else:
 
@@ -188,7 +189,7 @@ class LabelDrawer:
                     label = str(int(detection[4])) + ":" + self.classes[int(detection[-1])]
 
                 # 绘制所有标签
-                fw, fh = draw_rect_and_label(img,
+                fw, fh = draw_rect_and_label(plane,
                                              detection[:4],
                                              label,
                                              self.colors[int(detection[-1]) % len(self.colors)],
@@ -201,4 +202,12 @@ class LabelDrawer:
             if self.statistic:
                 pass
 
-        return img, None, statistic_info
+        if len(detections) > 0:
+            plane2gray = cv2.cvtColor(plane, cv2.COLOR_BGR2GRAY)
+
+            # 将像素值大于0的全都设为黑色，为0的全都为白色
+            _, mask_inv = cv2.threshold(plane2gray, 0, 255, cv2.THRESH_BINARY_INV)
+        else:
+            mask_inv = None
+
+        return img, plane, mask_inv

@@ -8,7 +8,7 @@ from PIL import Image
 
 from yolo3.detect.img_detect import ImageDetector
 from yolo3.utils.helper import load_classes
-from yolo3.utils.label_draw import LabelDrawer
+from yolo3.utils.label_draw import LabelDrawer, plane_composite
 from yolo3.utils.model_build import p1p2Toxywh
 
 
@@ -67,7 +67,6 @@ class VideoDetector:
                skip_secs=0,
                real_show=False,
                show_fps=True,
-               show_statistic=False,
                ):
         logging.info("Detect video: " + str(video_path))
         vid = cv2.VideoCapture(video_path)
@@ -89,11 +88,18 @@ class VideoDetector:
         if isOutput:
             logging.info(f"Output Type: {output_path}, {video_FourCC}, {video_fps}, {video_size}")
             out = cv2.VideoWriter(output_path, self.fourcc, video_fps, video_size)
+
+        if real_show:
+            cv2.namedWindow("result", cv2.WINDOW_NORMAL)
+            # cv2.resizeWindow("result", 800, 600)
+
         accum_time = 0
         curr_fps = 0
         fps = "FPS: ??"
         prev_time = time.time()
 
+        hold_plane_mask = None
+        hold_plane = None
         hold_detections = None
         actions = []
 
@@ -104,8 +110,6 @@ class VideoDetector:
                 return_value, frame = vid.read()
                 if not return_value:
                     break
-
-                # frame = cv2.resize(frame, (640, 480))
 
                 # BGR -> RGB
                 frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -126,29 +130,32 @@ class VideoDetector:
 
                         detections = self.tracker.update(boxs.cpu(), confidences, frame, class_ids)
 
+                        image, plane, plane_mask = self.label_drawer.draw_labels_by_trackers(frame,
+                                                                                             detections,
+                                                                                             only_rect=False)
+
                         if self.action_id is not None:
                             actions = self.action_id.update(detections)
                         else:
                             actions = []
+                    else:
+                        image, plane, plane_mask = self.label_drawer.draw_labels(frame, detections,
+                                                                                 only_rect=False)
 
+                    hold_plane_mask = plane_mask
+                    hold_plane = plane
                     hold_detections = detections
                     frames = 0
                 else:
                     actions = []
 
-                if hold_detections is None:
+                if hold_plane is None:
                     image = frame
                 else:
-                    if self.tracker is not None:
-                        image, _, statistic_infos = self.label_drawer.draw_labels_by_trackers(frame, hold_detections,
-                                                                                              only_rect=False)
-                    else:
-                        image, _, statistic_infos = self.label_drawer.draw_labels(frame, hold_detections,
-                                                                                  only_rect=False)
+                    image = plane_composite(frame, hold_plane, hold_plane_mask)
 
                 # RGB -> BGR
                 result = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
-                # result = image
 
                 frames += 1
 
@@ -165,10 +172,9 @@ class VideoDetector:
 
                 if show_fps:
                     cv2.putText(result, text=fps, org=(3, 15), fontFace=cv2.FONT_HERSHEY_SIMPLEX,
-                                fontScale=0.45, color=(255, 0, 0), thickness=self.thickness)
+                                fontScale=0.6, color=(255, 0, 0), thickness=self.thickness)
 
                 # Show the video in real time.
-
                 if real_show:
                     cv2.imshow("result", result)
 
