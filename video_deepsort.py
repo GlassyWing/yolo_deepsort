@@ -18,8 +18,11 @@ if __name__ == '__main__':
     tracker = DeepSort("weights/ckpt.t7",
                        min_confidence=0.5,
                        use_cuda=True,
-                       nn_budget=5,
-                       max_age=20)
+                       nn_budget=15,
+                       n_init=5,
+                       max_iou_distance=0.7,
+                       max_dist=0.2,
+                       max_age=70)
 
     # 动作识别器
     # action_id = ActionIdentify(actions=[TakeOff(4, delta=2),
