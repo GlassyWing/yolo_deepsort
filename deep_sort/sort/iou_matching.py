@@ -1,7 +1,5 @@
-# vim: expandtab:ts=4:sw=4
-from __future__ import absolute_import
-import numpy as np
-from . import linear_assignment
+import torch
+from .linear_assignment import INFTY_COST
 
 
 def iou(bbox, candidates):
@@ -23,24 +21,27 @@ def iou(bbox, candidates):
         occluded by the candidate.
 
     """
-    bbox_tl, bbox_br = bbox[:2], bbox[:2] + bbox[2:]
-    candidates_tl = candidates[:, :2]
-    candidates_br = candidates[:, :2] + candidates[:, 2:]
 
-    tl = np.c_[np.maximum(bbox_tl[0], candidates_tl[:, 0])[:, np.newaxis],
-               np.maximum(bbox_tl[1], candidates_tl[:, 1])[:, np.newaxis]]
-    br = np.c_[np.minimum(bbox_br[0], candidates_br[:, 0])[:, np.newaxis],
-               np.minimum(bbox_br[1], candidates_br[:, 1])[:, np.newaxis]]
-    wh = np.maximum(0., br - tl)
+    bbox = bbox.unsqueeze(1)  # (n, 1, 4)
+    candidates = candidates.unsqueeze(0)  # (1, m, 4)
+    bbox_mins = bbox[..., :2]
+    bbox_maxes = bbox[..., :2] + bbox[..., 2:]
 
-    area_intersection = wh.prod(axis=1)
-    area_bbox = bbox[2:].prod()
-    area_candidates = candidates[:, 2:].prod(axis=1)
-    return area_intersection / (area_bbox + area_candidates - area_intersection)
+    candidates_mins = candidates[..., :2]
+    candidates_maxes = candidates[..., 2:] + candidates[..., :2]
+
+    inter_mins = torch.max(bbox_mins, candidates_mins)  # (n, m, 2)
+    inter_maxes = torch.min(bbox_maxes, candidates_maxes)  # (n, m, 2)
+
+    inter_wh = torch.clamp(inter_maxes - inter_mins + 1, min=0)  # (n, m, 2)
+    inter_area = inter_wh[..., 0] * inter_wh[..., 1]  # (n, m)
+    bbox_area = bbox[..., 2] * bbox[..., 3]  # (n, m)
+    candidates_area = candidates[..., 2] * candidates[..., 3]  # (n, m)
+
+    return inter_area / (bbox_area + candidates_area - inter_area)  # (n, m)
 
 
-def iou_cost(tracks, detections, track_indices=None,
-             detection_indices=None):
+def iou_cost(tracks, detections, track_indices=None, detection_indices=None):
     """An intersection over union distance metric.
 
     Parameters
@@ -64,18 +65,27 @@ def iou_cost(tracks, detections, track_indices=None,
         `1 - iou(tracks[track_indices[i]], detections[detection_indices[j]])`.
 
     """
-    if track_indices is None:
-        track_indices = np.arange(len(tracks))
-    if detection_indices is None:
-        detection_indices = np.arange(len(detections))
 
-    cost_matrix = np.zeros((len(track_indices), len(detection_indices)))
+    if track_indices is None:
+        track_indices = list(range(len(tracks)))
+    if detection_indices is None:
+        detection_indices = list(range(len(detections)))
+
+    candidates = []
+    for i in detection_indices:
+        candidates.append(detections[i].tlwh)
+    candidates = torch.stack(candidates, dim=0)  # (m, 4)
+
+    bboxes = []
+    for track_idx in track_indices:
+        bboxes.append(tracks[track_idx].to_tlwh())
+    bboxes = torch.stack(bboxes, dim=0)  # (n, 4)
+
+    cost_matrix = 1. - iou(bboxes, candidates)
+
     for row, track_idx in enumerate(track_indices):
         if tracks[track_idx].time_since_update > 1:
-            cost_matrix[row, :] = linear_assignment.INFTY_COST
+            cost_matrix[row, :] = INFTY_COST
             continue
 
-        bbox = tracks[track_idx].to_tlwh()
-        candidates = np.asarray([detections[i].tlwh for i in detection_indices])
-        cost_matrix[row, :] = 1. - iou(bbox, candidates)
     return cost_matrix

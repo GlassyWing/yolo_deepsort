@@ -10,7 +10,7 @@ if __name__ == '__main__':
     LOG_FORMAT = "%(asctime)s - %(levelname)s - %(message)s"
     logging.basicConfig(level=logging.INFO, format=LOG_FORMAT)
 
-    model = Darknet("config/yolov3.cfg", img_size=416)
+    model = Darknet("config/yolov3.cfg", img_size=512)
     model.load_darknet_weights("weights/yolov3.weights")
     model.to("cuda:0")
 
@@ -18,18 +18,18 @@ if __name__ == '__main__':
     tracker = DeepSort("weights/ckpt.t7",
                        min_confidence=0.5,
                        use_cuda=True,
-                       nn_budget=15,
-                       n_init=5,
+                       nn_budget=30,
+                       n_init=10,
                        max_iou_distance=0.7,
                        max_dist=0.2,
                        max_age=70)
 
     # 动作识别器
-    # action_id = ActionIdentify(actions=[TakeOff(4, delta=2),
-    #                                     Landing(4, delta=-2),
-    #                                     Glide(4, delta=4),
-    #                                     FastCrossing(4, delta=2),
-    #                                     BreakInto(0, delta=2)],
+    # action_id = ActionIdentify(actions=[TakeOff(4, delta=(0, 1)),
+    #                                     Landing(4, delta=(2, 2)),
+    #                                     Glide(4, delta=(1, 2)),
+    #                                     FastCrossing(4, speed=0.2),
+    #                                     BreakInto(0, timeout=2)],
     #                            max_age=30,
     #                            max_size=8)
 

@@ -1,7 +1,4 @@
-# vim: expandtab:ts=4:sw=4
-import numpy as np
-import scipy.linalg
-
+import torch
 
 """
 Table for the 0.95 quantile of the chi-square distribution with N degrees of
@@ -12,7 +9,7 @@ chi2inv95 = {
     1: 3.8415,
     2: 5.9915,
     3: 7.8147,
-    4: 9.4877,
+    4: 11.070,
     5: 11.070,
     6: 12.592,
     7: 14.067,
@@ -20,37 +17,39 @@ chi2inv95 = {
     9: 16.919}
 
 
-class KalmanFilter(object):
-    """
-    A simple Kalman filter for tracking bounding boxes in image space.
+class KalmanFilter:
 
-    The 8-dimensional state space
+    def __init__(self, device="cpu"):
+        self._device = device
 
-        x, y, a, h, vx, vy, va, vh
-
-    contains the bounding box center position (x, y), aspect ratio a, height h,
-    and their respective velocities.
-
-    Object motion follows a constant velocity model. The bounding box location
-    (x, y, a, h) is taken as direct observation of the state space (linear
-    observation model).
-
-    """
-
-    def __init__(self):
-        ndim, dt = 4, 1.
-
-        # Create Kalman filter model matrices.
-        self._motion_mat = np.eye(2 * ndim, 2 * ndim)
+        ndim, dt = 4, 1
+        #  Create Kalman filter model matrices (8, 8)
+        self._motion_mat = torch.eye(2 * ndim, 2 * ndim, device=self._device, dtype=torch.float32)
         for i in range(ndim):
             self._motion_mat[i, ndim + i] = dt
-        self._update_mat = np.eye(ndim, 2 * ndim)
+
+        self._motion_mat = self._motion_mat.t()
+
+        # (8, 4)
+        self._update_mat = torch.eye(2 * ndim, ndim, device=self._device, dtype=torch.float32)
 
         # Motion and observation uncertainty are chosen relative to the current
         # state estimate. These weights control the amount of uncertainty in
         # the model. This is a bit hacky.
         self._std_weight_position = 1. / 20
         self._std_weight_velocity = 1. / 160
+
+        self._std_pos = torch.tensor([[
+            self._std_weight_position,
+            self._std_weight_position,
+            0,
+            self._std_weight_position]], device=self._device)
+
+        self._std_vel = torch.tensor([[
+            self._std_weight_velocity,
+            self._std_weight_velocity,
+            0,
+            self._std_weight_velocity]], device=self._device)
 
     def initiate(self, measurement):
         """Create track from unassociated measurement.
@@ -59,7 +58,7 @@ class KalmanFilter(object):
         ----------
         measurement : ndarray
             Bounding box coordinates (x, y, a, h) with center position (x, y),
-            aspect ratio a, and height h.
+            aspect ratio a, and height h. shape of (4, 1)
 
         Returns
         -------
@@ -70,10 +69,10 @@ class KalmanFilter(object):
 
         """
         mean_pos = measurement
-        mean_vel = np.zeros_like(mean_pos)
-        mean = np.r_[mean_pos, mean_vel]
+        mean_vel = torch.zeros_like(mean_pos)
+        mean = torch.cat([mean_pos, mean_vel], dim=-1).view(1, -1)  # (1, 8)
 
-        std = [
+        std = torch.tensor([[
             2 * self._std_weight_position * measurement[3],
             2 * self._std_weight_position * measurement[3],
             1e-2,
@@ -81,8 +80,10 @@ class KalmanFilter(object):
             10 * self._std_weight_velocity * measurement[3],
             10 * self._std_weight_velocity * measurement[3],
             1e-5,
-            10 * self._std_weight_velocity * measurement[3]]
-        covariance = np.diag(np.square(std))
+            10 * self._std_weight_velocity * measurement[3]]],
+            device=measurement.device)
+
+        covariance = torch.diag_embed(torch.pow(std, 2))  # (1, 8, 8)
         return mean, covariance
 
     def predict(self, mean, covariance):
@@ -91,11 +92,11 @@ class KalmanFilter(object):
         Parameters
         ----------
         mean : ndarray
-            The 8 dimensional mean vector of the object state at the previous
+            The 8 dimensional mean vector of shape (*, 8) of the object state at the previous
             time step.
         covariance : ndarray
             The 8x8 dimensional covariance matrix of the object state at the
-            previous time step.
+            previous time step. which shape is (*, 8, 8)
 
         Returns
         -------
@@ -104,23 +105,22 @@ class KalmanFilter(object):
             state. Unobserved velocities are initialized to 0 mean.
 
         """
-        std_pos = [
-            self._std_weight_position * mean[3],
-            self._std_weight_position * mean[3],
-            1e-2,
-            self._std_weight_position * mean[3]]
-        std_vel = [
-            self._std_weight_velocity * mean[3],
-            self._std_weight_velocity * mean[3],
-            1e-5,
-            self._std_weight_velocity * mean[3]]
-        motion_cov = np.diag(np.square(np.r_[std_pos, std_vel]))
 
-        mean = np.dot(self._motion_mat, mean)
-        covariance = np.linalg.multi_dot((
-            self._motion_mat, covariance, self._motion_mat.T)) + motion_cov
+        std_pos = mean[:, 3:4] * self._std_pos
+        std_vel = mean[:, 3:4] * self._std_vel
 
-        return mean, covariance
+        std_pos[:, 2] = 1e-2
+        std_vel[:, 2] = 1e-5
+
+        # (*, 8, 8)
+        motion_cov = torch.diag_embed(torch.pow(torch.cat([std_pos, std_vel], dim=-1), 2))
+
+        mean = torch.matmul(mean, self._motion_mat)  # (*, 8)
+
+        # (*, 8, 8)
+        covariance = torch.matmul(torch.matmul(covariance.permute(0, 2, 1), self._motion_mat).permute(0, 2, 1),
+                                  self._motion_mat)
+        return mean, covariance + motion_cov
 
     def project(self, mean, covariance):
         """Project state distribution to measurement space.
@@ -128,9 +128,9 @@ class KalmanFilter(object):
         Parameters
         ----------
         mean : ndarray
-            The state's mean vector (8 dimensional array).
+            The state's mean vector (*, 8).
         covariance : ndarray
-            The state's covariance matrix (8x8 dimensional).
+            The state's covariance matrix (*, 8, 8).
 
         Returns
         -------
@@ -139,16 +139,19 @@ class KalmanFilter(object):
             estimate.
 
         """
-        std = [
-            self._std_weight_position * mean[3],
-            self._std_weight_position * mean[3],
-            1e-1,
-            self._std_weight_position * mean[3]]
-        innovation_cov = np.diag(np.square(std))
 
-        mean = np.dot(self._update_mat, mean)
-        covariance = np.linalg.multi_dot((
-            self._update_mat, covariance, self._update_mat.T))
+        std = mean[:, 3:4] * self._std_pos  # (*, 4)
+        std[:, 2] = 1e-1  # (*, 4)
+
+        # (*, 4, 4)
+        innovation_cov = torch.diag_embed(torch.pow(std, 2))
+
+        # (4, 8) dot (*, 8)
+        mean = torch.mm(mean, self._update_mat)  # (*, 4)
+
+        # (*, 4, 4)
+        covariance = torch.matmul(torch.matmul(covariance.permute(0, 2, 1), self._update_mat).permute(0, 2, 1),
+                                  self._update_mat)
         return mean, covariance + innovation_cov
 
     def update(self, mean, covariance, measurement):
@@ -157,9 +160,9 @@ class KalmanFilter(object):
         Parameters
         ----------
         mean : ndarray
-            The predicted state's mean vector (8 dimensional).
+            The predicted state's mean vector (*, 8).
         covariance : ndarray
-            The state's covariance matrix (8x8 dimensional).
+            The state's covariance matrix (*,8,8).
         measurement : ndarray
             The 4 dimensional measurement vector (x, y, a, h), where (x, y)
             is the center position, a the aspect ratio, and h the height of the
@@ -171,22 +174,32 @@ class KalmanFilter(object):
             Returns the measurement-corrected state distribution.
 
         """
+
         projected_mean, projected_cov = self.project(mean, covariance)
 
-        chol_factor, lower = scipy.linalg.cho_factor(
-            projected_cov, lower=True, check_finite=False)
-        kalman_gain = scipy.linalg.cho_solve(
-            (chol_factor, lower), np.dot(covariance, self._update_mat.T).T,
-            check_finite=False).T
-        innovation = measurement - projected_mean
+        # Unfortunately, cholesky will randomly throw CUDA ERROR under linux GPU environment,
+        # this error is from pytorch1.2 to 1.5
+        # chol_factor = torch.cholesky(projected_cov, upper=False)
+        # kalman_gain = torch.cholesky_solve(torch.matmul(covariance, self._update_mat).permute(0, 2, 1),
+        #                                    chol_factor,
+        #                                    upper=False).permute(0, 2, 1)
 
-        new_mean = mean + np.dot(innovation, kalman_gain.T)
-        new_covariance = covariance - np.linalg.multi_dot((
-            kalman_gain, projected_cov, kalman_gain.T))
+        # The alternative solution is theoretically slower than cholesky_solve
+        kalman_gain = torch.solve(torch.matmul(covariance, self._update_mat).permute(0, 2, 1), projected_cov)[
+            0].permute(0, 2, 1)
+
+        # (*, 4)
+        innovation = measurement.view(-1, 4) - projected_mean
+
+        kalman_gain_t = kalman_gain.permute(0, 2, 1)
+        new_mean = mean + torch.bmm(innovation.unsqueeze(1), kalman_gain_t).view(-1, 8)  # (*, 8)
+        new_covariance = covariance - torch.matmul(
+            torch.matmul(projected_cov.permute(0, 2, 1), kalman_gain_t).permute(0, 2, 1),
+            kalman_gain_t)
+
         return new_mean, new_covariance
 
-    def gating_distance(self, mean, covariance, measurements,
-                        only_position=False):
+    def gating_distance(self, mean, covariance, measurements, only_position=False):
         """Compute gating distance between state distribution and measurements.
 
         A suitable distance threshold can be obtained from `chi2inv95`. If
@@ -196,11 +209,11 @@ class KalmanFilter(object):
         Parameters
         ----------
         mean : ndarray
-            Mean vector over the state distribution (8 dimensional).
+            Mean vector over the state distribution (n, 8).
         covariance : ndarray
-            Covariance of the state distribution (8x8 dimensional).
+            Covariance of the state distribution (n, 8, 8).
         measurements : ndarray
-            An Nx4 dimensional matrix of N measurements, each in
+            An Mx4 dimensional matrix of M measurements, each in
             format (x, y, a, h) where (x, y) is the bounding box center
             position, a the aspect ratio, and h the height.
         only_position : Optional[bool]
@@ -210,20 +223,47 @@ class KalmanFilter(object):
         Returns
         -------
         ndarray
-            Returns an array of length N, where the i-th element contains the
+            Returns an matrix of shape N X M, where the i-th row contains the
             squared Mahalanobis distance between (mean, covariance) and
-            `measurements[i]`.
+            `measurements[j]`.
 
         """
         mean, covariance = self.project(mean, covariance)
         if only_position:
-            mean, covariance = mean[:2], covariance[:2, :2]
-            measurements = measurements[:, :2]
+            mean, covariance = mean[:, None, :2], covariance[:, :2, :2]
+            measurements = measurements[None, :, :2]
+        else:
+            mean = mean.unsqueeze(1)
+            measurements = measurements.unsqueeze(0)
 
-        cholesky_factor = np.linalg.cholesky(covariance)
-        d = measurements - mean
-        z = scipy.linalg.solve_triangular(
-            cholesky_factor, d.T, lower=True, check_finite=False,
-            overwrite_b=True)
-        squared_maha = np.sum(z * z, axis=0)
+        d = - mean + measurements  # (n, m, 4)
+
+        # Unfortunately, cholesky will randomly throw CUDA ERROR under linux GPU environment,
+        # this error is from pytorch1.2 to 1.5
+
+        # cholesky_factor = torch.cholesky(covariance)
+        # z = torch.triangular_solve(d.permute(0, 2, 1), cholesky_factor, upper=False)[0]
+        # squared_maha = torch.sum(z ** 2, dim=1)  # (n, m)
+
+        # The alternative solution is theoretically slower than cholesky_solve
+        squared_maha = torch.bmm(torch.bmm(d, torch.inverse(covariance)), d.permute(0, 2, 1))
+        squared_maha = torch.diagonal(squared_maha, dim1=-2, dim2=-1)
+
         return squared_maha
+
+
+if __name__ == '__main__':
+    kf = KalmanFilter()
+    mean, covariance = kf.initiate(torch.tensor([10, 15, 0.5, 10]))
+    mean, covariance = kf.predict(mean, covariance)
+    mean, covariance = kf.update(mean, covariance, torch.tensor([12, 20, 0.6, 11]))
+
+    mean_2, covariance_2 = kf.initiate(torch.tensor([12, 13, 0.7, 5]))
+    mean_2, covariance_2 = kf.predict(mean_2, covariance_2)
+    mean_2, covariance_2 = kf.update(mean_2, covariance_2, torch.tensor([13, 14, 0.7, 8]))
+
+    squared_maha = kf.gating_distance(torch.cat((mean, mean_2), dim=0),
+                                      torch.cat((covariance, covariance_2), dim=0),
+                                      torch.tensor([[12, 20, 0.6, 11],
+                                                    [20, 16, 0.4, 18]]))
+    print(squared_maha)

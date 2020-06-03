@@ -37,7 +37,7 @@ class TakeOff(Action, ABC):
         ori_center = orbit.deque[0]
         for idx in range(1, len(orbit.deque)):
             center = orbit.deque[idx]
-            if ori_center[1] - center[1] > self.delta:
+            if ori_center[1] - center[1] > self.delta[1] and abs(ori_center[0] - center[0]) > self.delta[0]:
                 if idx == 1:
                     is_takeoff = True
                 else:
@@ -65,7 +65,7 @@ class Landing(Action, ABC):
         ori_center = orbit.deque[0]
         for idx in range(1, len(orbit.deque)):
             center = orbit.deque[idx]
-            if center[1] - ori_center[1] > self.delta:
+            if center[1] - ori_center[1] > self.delta[1] and abs(ori_center[0] - center[0]) > self.delta[0]:
                 if idx == 1:
                     if_landing = True
                 else:
@@ -92,7 +92,7 @@ class Glide(Action, ABC):
         ori_center = orbit.deque[0]
         for idx in range(1, len(orbit.deque)):
             center = orbit.deque[idx]
-            if abs(center[1] - ori_center[1]) < self.delta and abs(center[0] - ori_center[0]) > -2:
+            if abs(center[1] - ori_center[1]) < self.delta[1] and abs(center[0] - ori_center[0]) > self.delta[0]:
                 if idx == 1:
                     is_glide = True
                 else:
@@ -107,10 +107,10 @@ class Glide(Action, ABC):
 class FastCrossing(Action, ABC):
     """快速穿越"""
 
-    def __init__(self, class_id, delta):
+    def __init__(self, class_id, speed):
         super().__init__("fast_crossing")
         self.class_id = class_id
-        self.delta = delta
+        self.speed = speed
 
     def confirm(self, orbit: Orbit):
         if len(orbit.deque) == 0 or orbit.class_id != self.class_id:
@@ -121,7 +121,7 @@ class FastCrossing(Action, ABC):
         for idx in range(1, len(orbit.deque)):
             center = orbit.deque[idx]
             timestamp = orbit.timestamps[idx]
-            if abs(center[0] - ori_center[0]) > self.delta:
+            if abs(center[0] - ori_center[0]) / ((timestamp - ori_timestamp) * 1000) > self.speed:
                 if idx == 1:
                     is_confirm = True
                 else:
@@ -136,15 +136,15 @@ class FastCrossing(Action, ABC):
 class BreakInto(Action, ABC):
     """闯入"""
 
-    def __init__(self, class_id, delta):
+    def __init__(self, class_id, timeout):
         super().__init__("break_into")
         self.class_id = class_id
-        self.delta = delta
+        self.timeout = timeout
 
     def confirm(self, orbit: Orbit):
         if len(orbit.deque) == 0 or orbit.class_id != self.class_id:
             return False
         is_confirm = False
-        if len(orbit.deque) > self.delta:
+        if len(orbit.deque) > self.timeout:
             is_confirm = True
         return is_confirm

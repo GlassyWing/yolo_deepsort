@@ -1,6 +1,4 @@
-# vim: expandtab:ts=4:sw=4
-from __future__ import absolute_import
-import numpy as np
+import torch
 from . import kalman_filter
 from . import linear_assignment
 from . import iou_matching
@@ -37,68 +35,28 @@ class Tracker:
 
     """
 
-    def __init__(self, metric, max_iou_distance=0.7, max_age=70, n_init=3):
+    def __init__(self, metric, max_iou_distance=0.7, max_age=70, n_init=3, use_cuda=False):
         self.metric = metric
         self.max_iou_distance = max_iou_distance
         self.max_age = max_age
         self.n_init = n_init
+        self.device = "cuda" if torch.cuda.is_available() and use_cuda else "cpu"
 
-        self.kf = kalman_filter.KalmanFilter()
+        self.kf = kalman_filter.KalmanFilter(self.device)
         self.tracks = []
         self._next_id = 1
 
-    def predict(self):
-        """Propagate track state distributions one time step forward.
-
-        This function should be called once every time step, before `update`.
-        """
-        for track in self.tracks:
-            track.predict(self.kf)
-
-    def update(self, detections):
-        """Perform measurement update and track management.
-
-        Parameters
-        ----------
-        detections : List[deep_sort.detection.Detection]
-            A list of detections at the current time step.
-
-        """
-        # Run matching cascade.
-        matches, unmatched_tracks, unmatched_detections = \
-            self._match(detections)
-
-        # Update track set.
-        for track_idx, detection_idx in matches:
-            track = self.tracks[track_idx]
-            detection = detections[detection_idx]
-            track.update(
-                self.kf, detections[detection_idx])
-            # update payload info
-            track.payload = detection.payload
-        for track_idx in unmatched_tracks:
-            self.tracks[track_idx].mark_missed()
-        for detection_idx in unmatched_detections:
-            self._initiate_track(detections[detection_idx])
-        self.tracks = [t for t in self.tracks if not t.is_deleted()]
-
-        # Update distance metric.
-        active_targets = [t.track_id for t in self.tracks if t.is_confirmed()]
-        features, targets = [], []
-        for track in self.tracks:
-            if not track.is_confirmed():
-                continue
-            features += track.features
-            targets += [track.track_id for _ in track.features]
-            track.features = []
-        self.metric.partial_fit(
-            np.asarray(features), np.asarray(targets), active_targets)
+    def _initiate_track(self, detection):
+        mean, covariance = self.kf.initiate(detection.to_xyah())
+        self.tracks.append(Track(
+            mean, covariance, self._next_id, self.n_init, self.max_age,
+            detection.feature, detection.payload))
+        self._next_id += 1
 
     def _match(self, detections):
-
         def gated_metric(tracks, dets, track_indices, detection_indices):
-            features = np.array([dets[i].feature for i in detection_indices])
-            targets = np.array([tracks[i].track_id for i in track_indices])
+            features = torch.stack([dets[i].feature for i in detection_indices], dim=0)
+            targets = [tracks[i].track_id for i in track_indices]
             cost_matrix = self.metric.distance(features, targets)
             cost_matrix = linear_assignment.gate_cost_matrix(
                 self.kf, cost_matrix, tracks, dets, track_indices,
@@ -134,9 +92,85 @@ class Tracker:
         unmatched_tracks = list(set(unmatched_tracks_a + unmatched_tracks_b))
         return matches, unmatched_tracks, unmatched_detections
 
-    def _initiate_track(self, detection):
-        mean, covariance = self.kf.initiate(detection.to_xyah())
-        self.tracks.append(Track(
-            mean, covariance, self._next_id, self.n_init, self.max_age,
-            detection.feature, detection.payload))
-        self._next_id += 1
+    def predict(self):
+        """Propagate track state distributions one time step forward.
+
+        This function should be called once every time step, before `update`.
+        """
+        track_means = []
+        track_covs = []
+        for track in self.tracks:
+            track_means.append(track.mean)
+            track_covs.append(track.covariance)
+
+        if len(self.tracks) != 0:
+            track_means = torch.cat(track_means, dim=0)
+            track_covs = torch.cat(track_covs, dim=0)
+            updated_means, updated_covs = self.kf.predict(track_means, track_covs)
+
+            for i, track in enumerate(self.tracks):
+                track.predict(updated_means[i].unsqueeze(0),
+                              updated_covs[i].unsqueeze(0))
+
+    def update(self, detections):
+        """Perform measurement update and track management.
+
+        Parameters
+        ----------
+        detections : List[deep_sort.detection.Detection]
+            A list of detections at the current time step.
+
+        """
+        # Run matching cascade.
+        matches, unmatched_tracks, unmatched_detections = \
+            self._match(detections)
+
+        # Update track set.
+        if len(matches) != 0:
+            matched_track_means = []
+            matched_track_covs = []
+            matched_measures = []
+
+            for track_idx, detection_idx in matches:
+                track = self.tracks[track_idx]
+                detection = detections[detection_idx]
+                matched_track_means.append(track.mean)
+                matched_track_covs.append(track.covariance)
+                matched_measures.append(detection.tlwh)
+
+            matched_track_means = torch.cat(matched_track_means, dim=0)
+            matched_track_covs = torch.cat(matched_track_covs, dim=0)
+            matched_measures = torch.stack(matched_measures, dim=0)
+
+            matched_measures[:, :2] += matched_measures[:, 2:] / 2
+            matched_measures[:, 2] /= matched_measures[:, 3]
+
+            # Make the most of the GPU
+            updated_means, updated_covs = self.kf.update(matched_track_means, matched_track_covs, matched_measures)
+            for i, (track_idx, detection_idx) in enumerate(matches):
+                track = self.tracks[track_idx]
+                detection = detections[detection_idx]
+                track.update(updated_means[i].unsqueeze(0),
+                             updated_covs[i].unsqueeze(0),
+                             detection.feature,
+                             detection.payload)
+
+        for track_idx in unmatched_tracks:
+            self.tracks[track_idx].mark_missed()
+        for detection_idx in unmatched_detections:
+            self._initiate_track(detections[detection_idx])
+        self.tracks = [t for t in self.tracks if not t.is_deleted()]
+
+        # Update distance metric.
+        active_targets = [t.track_id for t in self.tracks if t.is_confirmed()]
+        features, targets = [], []
+        for track in self.tracks:
+            if not track.is_confirmed():
+                continue
+            features += track.features
+            targets += [track.track_id for _ in track.features]
+            track.features = []
+        self.metric.partial_fit(
+            features,
+            targets,
+            active_targets)
