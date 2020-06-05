@@ -14,7 +14,7 @@ from torch.autograd import Variable
 
 from yolo3.dataset.dataset import pad_to_square, resize
 from yolo3.utils.helper import load_classes
-from yolo3.utils.model_build import non_max_suppression, rescale_boxes, xywh2p1p2
+from yolo3.utils.model_build import non_max_suppression, rescale_boxes, xywh2p1p2, resize_boxes
 
 
 def scale(image, shape, max_size):
@@ -38,14 +38,20 @@ class ImageDetector:
                  conf_thres=0.5,
                  nms_thres=0.4,
                  win_size=None,
-                 overlap=0.15):
+                 overlap=0.15,
+                 half=False):
         self.model = model
         self.model.eval()
+
+        if half:
+            self.model.half()
+
         self.classes = load_classes(class_path)
         self.num_classes = len(self.classes)
         self.thickness = thickness
         self.conf_thres = conf_thres
         self.nms_thres = nms_thres
+        self.half = half
         self.win_size = win_size
         self.overlap = overlap
 
@@ -61,11 +67,15 @@ class ImageDetector:
 
         if self.win_size is None or w < win_width and h < win_height:
 
-            image = scale(image, img.shape, self.model.img_size)
-            image, _ = pad_to_square(image, 0)
+            # image = scale(image, img.shape, self.model.img_size)
+            # image, _ = pad_to_square(image, 0)
+            image = resize(image, (self.model.img_size, self.model.img_size))
 
             # Add batch dimension
             image = image.unsqueeze(0)
+
+            if self.half:
+                image = image.half()
 
             prev_time = time.time()
             with torch.no_grad():
@@ -73,7 +83,8 @@ class ImageDetector:
                 detections = non_max_suppression(detections, self.conf_thres, self.nms_thres)
                 detections = detections[0]
                 if detections is not None:
-                    detections = rescale_boxes(detections, self.model.img_size, (h, w))
+                    # detections = rescale_boxes(detections, self.model.img_size, (h, w))
+                    detections = resize_boxes(detections, self.model.img_size, (h, w))
 
             current_time = time.time()
             inference_time = datetime.timedelta(seconds=current_time - prev_time)
@@ -90,14 +101,19 @@ class ImageDetector:
                     # 截取窗口大小的图像，再加上一些重叠区域
                     img = image[:, y:y + win_height + overlap_y, x:x + win_width + overlap_x]
                     truncated_images_ori_size.append((img.shape[1], img.shape[2]))
-                    img = scale(img, (img.shape[1], img.shape[2], img.shape[0]), self.model.img_size)
-                    img, _ = pad_to_square(img, 0)
+                    # img = scale(img, (img.shape[1], img.shape[2], img.shape[0]), self.model.img_size)
+                    # img, _ = pad_to_square(img, 0)
+                    img = resize(img, (self.model.img_size, self.model.img_size))
                     # cv2.imshow(str(x) + "-" + str(y), img.permute((1, 2, 0)).numpy())
 
+                    offset = torch.tensor([x, y, x, y], dtype=torch.float32, device=image.device)
+
+                    if self.half:
+                        offset = offset.half()
+                        img = img.half()
+
+                    offsets.append(offset)
                     truncated_images.append(img)
-
-                    offsets.append(torch.tensor([x, y, x, y], dtype=torch.float32, device=image.device))
-
             # (n, model.img_size, model.img_size)
             truncated_images = torch.stack(truncated_images, 0)
             prev_time = time.time()
@@ -107,7 +123,8 @@ class ImageDetector:
 
                 rescaled_detections = []
                 for idx, detection in enumerate(detections):
-                    detection = rescale_boxes(detection, self.model.img_size, truncated_images_ori_size[idx])
+                    # detection = rescale_boxes(detection, self.model.img_size, truncated_images_ori_size[idx])
+                    detection = resize_boxes(detection, self.model.img_size, truncated_images_ori_size[idx])
                     detection[..., :4] += offsets[idx]
                     rescaled_detections.append(detection)
 

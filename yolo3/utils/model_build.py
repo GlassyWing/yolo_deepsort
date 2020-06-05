@@ -6,6 +6,16 @@ from torchvision.ops.boxes import batched_nms
 epsilon = 1e-16
 
 
+def resize_boxes(boxes, current_dim, original_shape):
+    h_ratio = original_shape[0] / current_dim
+    w_ratio = original_shape[1] / current_dim
+    boxes[..., 0] *= w_ratio
+    boxes[..., 1] *= h_ratio
+    boxes[..., 2] *= w_ratio
+    boxes[..., 3] *= h_ratio
+    return boxes
+
+
 def rescale_boxes(boxes, current_dim, original_shape):
     """ Rescales bounding boxes to the original shape """
     #  FOR CASE: 1st resize; 2nd pad
@@ -61,9 +71,12 @@ def non_max_suppression(prediction, conf_thres=0.5, nms_thres=0.4, is_p1p2=False
         # Sort by it
         # image_pred = image_pred[(-score).argsort()]
         class_confs, class_preds = image_pred[:, 5:].max(1, keepdim=True)
-        detections = torch.cat((image_pred[:, :5], class_confs.float(), class_preds.float()), dim=1)
 
-        keep = batched_nms(image_pred[:, :4], score, class_preds[:, 0], nms_thres)
+        detections = torch.cat((image_pred[:, :5],
+                                class_confs.type(prediction.dtype),
+                                class_preds.type(prediction.dtype)), dim=1)
+
+        keep = batched_nms(image_pred[:, :4].float(), score, class_preds[:, 0], nms_thres)
         output[image_i] = detections[keep]
 
         # Perform non-maximum suppression

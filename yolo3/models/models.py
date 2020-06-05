@@ -1,4 +1,5 @@
 import threading
+import time
 
 import torch.nn as nn
 import torch
@@ -10,6 +11,15 @@ import logging
 from yolo3.utils.helper import to_cpu
 from yolo3.utils.model_build import build_targets, epsilon
 from yolo3.utils.parse_config import parse_model_config
+
+
+class Mish(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, x):
+        x = x * (torch.tanh(torch.nn.functional.softplus(x)))
+        return x
 
 
 def create_modules(module_defs):
@@ -39,9 +49,11 @@ def create_modules(module_defs):
                 ),
             )
             if bn:
-                modules.add_module(f"batch_norm_{module_i}", nn.BatchNorm2d(filters, momentum=0.9, eps=1e-5))
+                modules.add_module(f"batch_norm_{module_i}", nn.BatchNorm2d(filters, momentum=0.1, eps=1e-5))
             if module_def["activation"] == "leaky":
                 modules.add_module(f"leaky_{module_i}", nn.LeakyReLU(0.1, inplace=True))
+            elif module_def["activation"] == 'mish':
+                modules.add_module('mish_{0}'.format(module_i), Mish())
 
         elif module_def["type"] == "maxpool":
             kernel_size = int(module_def["size"])
@@ -119,16 +131,18 @@ class YOLOLayer(nn.Module):
         self.grid_size = 0
         self.lock = threading.Lock()
 
-    def compute_grid_offsets(self, grid_size, cuda=True):
+    def compute_grid_offsets(self, grid_size,  device, dtype):
         self.grid_size = g = grid_size
-        FloatTensor = torch.cuda.FloatTensor if cuda else torch.FloatTensor
         self.scale = self.img_dim / self.grid_size
-        grid_x = torch.arange(g).repeat((g, 1)).type(FloatTensor)
-        grid_y = torch.arange(g).repeat((g, 1)).t().type(FloatTensor)
+
+        grid_y, grid_x = torch.meshgrid([torch.arange(g, dtype=torch.int32, device=device),
+                                         torch.arange(g, dtype=torch.int32, device=device)])
+        grid_y = grid_y.type(dtype)
+        grid_x = grid_x.type(dtype)
 
         # reshape to (batch, num_anchor, height, width, 2)
         self.grid = torch.stack((grid_x.flatten(), grid_y.flatten()), 1).view((1, 1, g, g, 2))
-        self.scaled_anchors = FloatTensor([(a_w / self.scale, a_h / self.scale) for a_w, a_h in self.anchors])
+        self.scaled_anchors = torch.tensor(self.anchors, dtype=dtype, device=device) / self.scale
 
         self.anchor = self.scaled_anchors.view((1, self.num_anchors, 1, 1, 2))
 
@@ -140,7 +154,6 @@ class YOLOLayer(nn.Module):
         :param img_dim:
         :return:
         """
-        FloatTensor = torch.cuda.FloatTensor if x.is_cuda else torch.FloatTensor
 
         self.img_dim = img_dim
         num_samples = x.size(0)
@@ -159,13 +172,11 @@ class YOLOLayer(nn.Module):
         self.lock.acquire()
         try:
             if grid_size != self.grid_size:
-                self.compute_grid_offsets(grid_size, cuda=x.is_cuda)
+                self.compute_grid_offsets(grid_size, x.device, x.dtype)
         finally:
             self.lock.release()
 
-        pred_boxes = FloatTensor(prediction[..., :4].shape)
-        pred_boxes[..., 0:2] = xy.detach() + self.grid
-        pred_boxes[..., 2:4] = torch.exp(wh.detach()) * self.anchor
+        pred_boxes = torch.cat([xy.detach() + self.grid, torch.exp(wh.detach()) * self.anchor], dim=-1)
 
         # (batch, width * height * num_anchor, 5 + num_classes)
         output = torch.cat(
@@ -345,3 +356,16 @@ class Darknet(nn.Module):
                 conv_layer.weight.data.cpu().numpy().tofile(fp)
 
         fp.close()
+
+
+if __name__ == '__main__':
+    darknet = Darknet("E:\python\yolo3_deepsort\config\yolov4.cfg")
+    darknet.cuda()
+    darknet.eval()
+    x = torch.randn(1, 3, 416, 416).cuda()
+
+    with torch.no_grad():
+        for i in range(3):
+            s = time.time()
+            darknet(x)
+            print(time.time() - s)

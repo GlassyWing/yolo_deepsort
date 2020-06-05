@@ -40,7 +40,8 @@ class VideoDetector:
                  win_size=None,
                  overlap=0.15,
                  tracker=None,
-                 action_id=None):
+                 action_id=None,
+                 half=False):
         self.thickness = thickness
         self.skip_frames = skip_frames
         self.class_mask = class_mask
@@ -57,7 +58,8 @@ class VideoDetector:
                                             conf_thres=conf_thres,
                                             nms_thres=nms_thres,
                                             win_size=win_size,
-                                            overlap=overlap)
+                                            overlap=overlap,
+                                            half=half)
 
         self.tracker = tracker
         self.action_id = action_id
@@ -91,7 +93,8 @@ class VideoDetector:
 
         if real_show:
             cv2.namedWindow("result", cv2.WINDOW_NORMAL)
-            # cv2.resizeWindow("result", 800, 600)
+            cv2.resizeWindow("result", 800, 600)
+            pass
 
         accum_time = 0
         curr_fps = 0
@@ -111,6 +114,9 @@ class VideoDetector:
                 if not return_value:
                     break
 
+                # frame = cv2.resize(frame, (640, 480))
+                # frame = cv2.hconcat([frame, frame, frame])
+
                 # BGR -> RGB
                 frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 if frames % self.skip_frames == 0:
@@ -128,7 +134,7 @@ class VideoDetector:
                             confidences = confidences[mask]
                             class_ids = class_ids[mask]
 
-                        detections = self.tracker.update(boxs.cpu(), confidences, frame, class_ids)
+                        detections = self.tracker.update(boxs.float().cpu(), confidences, frame, class_ids)
 
                         image, plane, plane_mask = self.label_drawer.draw_labels_by_trackers(frame,
                                                                                              detections,
@@ -169,6 +175,7 @@ class VideoDetector:
                     accum_time = accum_time - 1
                     fps = "FPS: " + str(curr_fps)
                     curr_fps = 0
+                    print(fps)
 
                 if show_fps:
                     cv2.putText(result, text=fps, org=(3, 15), fontFace=cv2.FONT_HERSHEY_SIMPLEX,
