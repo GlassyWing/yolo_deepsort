@@ -1,10 +1,15 @@
 import logging
 import time
 from functools import reduce
+import multiprocessing as mp
+from queue import Queue
+from threading import Thread
 
 import cv2
 import numpy as np
+import torch
 from PIL import Image
+from imutils.video import FileVideoStream
 
 from yolo3.detect.img_detect import ImageDetector
 from yolo3.utils.helper import load_classes
@@ -23,6 +28,10 @@ def alpha_composite(img, plane):
         result = np.ndarray(buffer=out.tobytes(), shape=img.shape, dtype='uint8')
 
         return result
+
+
+def _transform(frame):
+    return cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
 
 class VideoDetector:
@@ -71,7 +80,10 @@ class VideoDetector:
                show_fps=True,
                ):
         logging.info("Detect video: " + str(video_path))
-        vid = cv2.VideoCapture(video_path)
+
+        fvs = FileVideoStream(video_path, transform=_transform)
+        vid = fvs.stream
+
         if not vid.isOpened():
             raise IOError("Couldn't open webcam or video")
         video_FourCC = int(vid.get(cv2.CAP_PROP_FOURCC))
@@ -95,30 +107,25 @@ class VideoDetector:
             cv2.namedWindow("result", cv2.WINDOW_NORMAL)
             cv2.resizeWindow("result", 800, 600)
             pass
+        fvs.start()
 
         accum_time = 0
         curr_fps = 0
         fps = "FPS: ??"
         prev_time = time.time()
 
-        hold_plane_mask = None
-        hold_plane = None
         hold_detections = None
         actions = []
 
         frames = 0
         try:
-            while True:
-
-                return_value, frame = vid.read()
-                if not return_value:
-                    break
+            while fvs.more():
+                frame = fvs.read()
 
                 # frame = cv2.resize(frame, (640, 480))
                 # frame = cv2.hconcat([frame, frame, frame])
 
                 # BGR -> RGB
-                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 if frames % self.skip_frames == 0:
                     detections = self.image_detector.detect(frame)
 
@@ -136,29 +143,26 @@ class VideoDetector:
 
                         detections = self.tracker.update(boxs.float().cpu(), confidences, frame, class_ids)
 
-                        image, plane, plane_mask = self.label_drawer.draw_labels_by_trackers(frame,
-                                                                                             detections,
-                                                                                             only_rect=False)
-
                         if self.action_id is not None:
                             actions = self.action_id.update(detections)
                         else:
                             actions = []
-                    else:
-                        image, plane, plane_mask = self.label_drawer.draw_labels(frame, detections,
-                                                                                 only_rect=False)
 
-                    hold_plane_mask = plane_mask
-                    hold_plane = plane
                     hold_detections = detections
                     frames = 0
                 else:
                     actions = []
 
-                if hold_plane is None:
-                    image = frame
+                if hold_detections is not None:
+                    if self.tracker is not None:
+                        image, plane, plane_mask = self.label_drawer.draw_labels_by_trackers(frame,
+                                                                                             hold_detections,
+                                                                                             only_rect=False)
+                    else:
+                        image, plane, plane_mask = self.label_drawer.draw_labels(frame, hold_detections,
+                                                                                 only_rect=False)
                 else:
-                    image = plane_composite(frame, hold_plane, hold_plane_mask)
+                    image, plane, plane_mask = frame, None, None
 
                 # RGB -> BGR
                 result = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)

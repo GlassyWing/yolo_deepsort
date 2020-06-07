@@ -4,6 +4,7 @@ import os
 import random
 import time
 
+import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
@@ -56,8 +57,8 @@ class ImageDetector:
         self.overlap = overlap
 
     def detect(self, img):
-
-        image = torch.from_numpy(img).to(device="cuda:0" if torch.cuda.is_available() else "cpu")
+        image = cv2.resize(img, (self.model.img_size, self.model.img_size), interpolation=cv2.INTER_LINEAR)
+        image = torch.from_numpy(image).to(device="cuda:0" if torch.cuda.is_available() else "cpu")
         image = image.permute((2, 0, 1)) / 255.
 
         h, w, _ = img.shape
@@ -69,7 +70,7 @@ class ImageDetector:
 
             # image = scale(image, img.shape, self.model.img_size)
             # image, _ = pad_to_square(image, 0)
-            image = resize(image, (self.model.img_size, self.model.img_size))
+            # image = resize(image, (self.model.img_size, self.model.img_size))
 
             # Add batch dimension
             image = image.unsqueeze(0)

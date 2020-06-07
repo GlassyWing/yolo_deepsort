@@ -6,6 +6,7 @@ import cv2
 
 from .model import Net
 
+
 class Extractor(object):
     def __init__(self, model_path, use_cuda=True):
         self.net = Net(reid=True)
@@ -29,12 +30,13 @@ class Extractor(object):
             4. normalize
         """
 
-        result = []
-        for im in im_crops:
-            im = F.interpolate(self.__norm(im).unsqueeze(0), size=(self.size[1], self.size[0]), mode="nearest")
-            result.append(im)
+        def _resize(im, size):
+            im = torch.from_numpy(cv2.resize(im, size, interpolation=cv2.INTER_LINEAR)).to(
+                self.device).float().permute(2, 0, 1)
+            return im
 
-        im_batch = torch.cat(result, dim=0)
+        im_batch = torch.stack([self.__norm(_resize(im, self.size)) for im in im_crops], dim=0)
+        im_batch /= 255.
         return im_batch
 
     def __call__(self, im_crops):

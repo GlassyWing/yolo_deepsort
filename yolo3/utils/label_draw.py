@@ -12,49 +12,45 @@ def _get_statistic_info(detections, unique_labels, classes):
     return statistic_info
 
 
-def draw_rect(img, rect, color, thickness):
-    """绘制边框和标签"""
-    x1, y1, x2, y2 = rect
+def draw_rects(img, dets, colors, thickness):
+    for det in dets:
+        x1, y1, x2, y2 = det[:4]
+        cls = int(det[-1])
 
-    c1 = (int(x1), int(y1))
-    c2 = (int(x2), int(y2))
+        c1 = (int(x1), int(y1))
+        c2 = (int(x2), int(y2))
 
-    image = cv2.rectangle(img, c1, c2, color, thickness)
-    return image
+        cv2.rectangle(img, c1, c2, colors[cls], thickness)
+    return img
 
 
-def draw_rect_and_label(img, rect, label, color, thickness, font, font_size=18):
-    """绘制边框和标签"""
-    x1, y1, x2, y2 = rect
+def draw_rects_and_labels(img, dets, colors, labels, thickness, font_size, font=None):
+    for i, det in enumerate(dets):
+        x1, y1, x2, y2 = det[:4]
+        cls = int(det[-1])
 
-    color = (int(color[0]), int(color[1]), int(color[2]))
+        c1 = (int(x1), int(y1))
+        c2 = (int(x2), int(y2))
 
-    # 绘制边框
-    draw_rect(img, rect, color, thickness)
+        cv2.rectangle(img, c1, c2, colors[cls], thickness)
 
-    # 绘制文本框
-    label_size = (int(font_size * 1.1 * len(label)), font_size)
-
-    if y1 - label_size[1] >= 0:
-        text_origin = int(x1), int(y1) - label_size[1]
-    else:
-        text_origin = int(x1), int(y1) + 1
-    # cv2.rectangle(img, text_origin, (text_origin[0] + label_size[0],
-    #                                  text_origin[1] + label_size[1]),
-    #               color, -1)
-    if font is not None:
-        font.putText(img=img,
-                     text=label,
-                     org=text_origin,
-                     fontHeight=font_size,
-                     color=(255, 255, 255),
-                     thickness=-1,
-                     line_type=cv2.LINE_AA,
-                     bottomLeftOrigin=False)
-    else:
-        cv2.putText(img, label, text_origin, cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
-
-    return label_size
+        if font is not None:
+            font_w, font_h = font.getTextSize(labels[i], font_size, -1)
+            font.putText(img=img,
+                         text=labels[i],
+                         org=(c1[0], max(c1[1] - 5, font_h)),
+                         fontHeight=font_size,
+                         color=(255, 255, 255),
+                         thickness=-1,
+                         line_type=cv2.LINE_AA,
+                         bottomLeftOrigin=True)
+        else:
+            font_w, font_h = cv2.getTextSize(labels[i], cv2.FONT_HERSHEY_COMPLEX, font_size / 10, 2)
+            cv2.putText(img,
+                        labels[i],
+                        (c1[0], max(c1[1] - 5, font_h)), cv2.FONT_HERSHEY_SIMPLEX, font_size / 10,
+                        (255, 255, 255), 2)
+    return img
 
 
 def draw_single_img(img, detections, img_size,
@@ -69,46 +65,25 @@ def draw_single_img(img, detections, img_size,
     statistic_info = {}
 
     # Detected something
-    plane = np.zeros_like(img)
     if detections is not None:
-
+        detections = detections.cpu().float().numpy()
         if statistic:
             unique_labels = detections[:, -1].unique()
             statistic_info = _get_statistic_info(detections, unique_labels, classes)
 
-        # make a blank image for text, rectangle, initialized to transparent color
-
-        font_height = 0
-        font_width = 0
-
-        for idx, detection in enumerate(detections):
-            if only_rect:
-                draw_rect(plane, detection[:4], colors[int(detection[-1])], thickness)
-
-            else:
-                # 绘制所有标签
-                (fw, fh) = draw_rect_and_label(plane, detection[:4],
-                                               classes[int(detection[-1])],
-                                               colors[int(detection[-1])],
-                                               thickness,
-                                               font,
-                                               font_size)
-                font_height = max(font_height, fh)
-                font_width = max(font_width, fw)
+        if only_rect:
+            draw_rects(img, detections, colors, thickness)
+        else:
+            labels = []
+            for detection in detections:
+                labels.append(classes[int(detection[-1])])
+            draw_rects_and_labels(img, detections, colors, labels, thickness, font_size, font)
 
         if not only_rect and statistic:
             # 绘制统计信息
             pass
 
-        if len(detections) > 0:
-            plane2gray = cv2.cvtColor(plane, cv2.COLOR_BGR2GRAY)
-
-            # 将像素值大于0的全都设为黑色，为0的全都为白色
-            _, mask_inv = cv2.threshold(plane2gray, 0, 255, cv2.THRESH_BINARY_INV)
-        else:
-            mask_inv = None
-
-        return img, plane, mask_inv
+        return img, None, None
 
     else:
         logging.debug("Nothing Detected.")
@@ -154,6 +129,7 @@ class LabelDrawer:
         np.random.seed(1)
         self.colors = (np.random.rand(min(999, num_classes), 3) * 255).astype(int)
         np.random.seed(None)
+        self.colors = [(int(color[0]), int(color[1]), int(color[2])) for color in self.colors]
 
     def clone(self):
         return LabelDrawer(self.classes, self.font_path, self.font_size, self.thickness,
@@ -170,44 +146,26 @@ class LabelDrawer:
                                font_size=self.font_size)
 
     def draw_labels_by_trackers(self, img, detections, only_rect):
-        statistic_info = {}
 
-        plane = np.zeros_like(img)
-        for detection in detections:
+        if only_rect:
+            draw_rects(img, detections, self.colors, self.thickness)
+        else:
 
-            font_height = 0
-            font_width = 0
-
-            if only_rect:
-                draw_rect(plane, detection[:4], self.colors[int(detection[4])], self.thickness)
-
-            else:
-
+            labels = []
+            for detection in detections:
                 if self.id2label is not None and str(int(detection[4])) in self.id2label:
                     label = str(int(detection[4])) + ":" + self.id2label[str(int(detection[4]))]
                 else:
                     label = str(int(detection[4])) + ":" + self.classes[int(detection[-1])]
+                labels.append(label)
 
-                # 绘制所有标签
-                fw, fh = draw_rect_and_label(plane,
-                                             detection[:4],
-                                             label,
-                                             self.colors[int(detection[-1]) % len(self.colors)],
-                                             self.thickness,
-                                             self.font,
-                                             font_size=self.font_size)
-                font_height = max(font_height, fh)
-                font_width = max(font_width, fw)
+            # 绘制所有标签
+            draw_rects_and_labels(img,
+                                  detections,
+                                  self.colors,
+                                  labels,
+                                  self.thickness,
+                                  self.font_size,
+                                  self.font)
 
-            if self.statistic:
-                pass
-
-        if len(detections) > 0:
-            plane2gray = cv2.cvtColor(plane, cv2.COLOR_BGR2GRAY)
-
-            # 将像素值大于0的全都设为黑色，为0的全都为白色
-            _, mask_inv = cv2.threshold(plane2gray, 0, 255, cv2.THRESH_BINARY_INV)
-        else:
-            mask_inv = None
-
-        return img, plane, mask_inv
+        return img, None, None

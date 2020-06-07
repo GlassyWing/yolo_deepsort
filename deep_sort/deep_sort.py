@@ -115,9 +115,9 @@ class DeepSort(object):
     def _s_tlwh_to_xyxy(self, bbox_tlwh):
         x, y, w, h = bbox_tlwh
         x1 = max(int(x), 0)
-        x2 = min(int(x + w * 0.75), self.width - 1)
+        x2 = min(int(x + w ), self.width - 1)
         y1 = max(int(y), 0)
-        y2 = min(int(y + h * 0.75), self.height - 1)
+        y2 = min(int(y + h ), self.height - 1)
         return x1, y1, x2, y2
 
     def _xyxy_to_tlwh(self, bbox_xyxy):
@@ -132,12 +132,9 @@ class DeepSort(object):
     def _get_features(self, bbox_xywh, ori_img):
         im_crops = []
 
-        ori_img = torch.from_numpy(ori_img.astype(np.uint8)).to(self.extractor.device)
-        ori_img = ori_img.permute((2, 0, 1)) / 255.
-
         for box in bbox_xywh:
             x1, y1, x2, y2 = self._s_tlwh_to_xyxy(box)
-            im = ori_img[:, y1:y2, x1:x2]
+            im = ori_img[y1:y2, x1:x2]
             im_crops.append(im)
         if im_crops:
             features = self.extractor(im_crops).to(self.tracker.device)
