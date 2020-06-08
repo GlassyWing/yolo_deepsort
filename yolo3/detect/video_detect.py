@@ -125,6 +125,9 @@ class VideoDetector:
                 # frame = cv2.resize(frame, (640, 480))
                 # frame = cv2.hconcat([frame, frame, frame])
 
+                if frame is None:
+                    break
+
                 # BGR -> RGB
                 if frames % self.skip_frames == 0:
                     detections = self.image_detector.detect(frame)
