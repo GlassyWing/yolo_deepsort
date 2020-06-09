@@ -144,7 +144,7 @@ class VideoDetector:
                             confidences = confidences[mask]
                             class_ids = class_ids[mask]
 
-                        detections = self.tracker.update(boxs.float().cpu(), confidences, frame, class_ids)
+                        detections = self.tracker.update(boxs.float(), confidences, frame, class_ids)
 
                         if self.action_id is not None:
                             actions = self.action_id.update(detections)

@@ -1,3 +1,5 @@
+import time
+
 import numpy as np
 import torch
 
@@ -46,9 +48,7 @@ class DeepSort(object):
         # generate detections
         features = self._get_features(bbox_xywh, ori_img)
         bbox_tlwh = bbox_xywh.to(self.tracker.device)
-        detections = [Detection(bbox_tlwh[i], conf, features[i], payload[i]) for i, conf in enumerate(confidences) if
-                      conf > self.min_confidence]
-
+        detections = [Detection(bbox_tlwh[i], 1, features[i], payload[i]) for i in range(len(bbox_xywh))]
         if self.nms_max_overlap != 1:
             # run on non-maximum supression
             boxes = np.array([d.tlwh for d in detections])
@@ -76,14 +76,15 @@ class DeepSort(object):
             boxes[:, 2] *= boxes[:, 3]
             boxes[:, :2] -= boxes[:, 2:] / 2
             boxes = self._tlwh_to_xyxy(boxes)
-
+            if boxes.device != "cpu":
+                boxes = boxes.cpu()
         for idx, track in enumerate(valid_tracks):
             x1, y1, x2, y2 = boxes[idx]
             track_id = track.track_id
             class_id = track.payload
-            outputs.append(np.array([x1, y1, x2, y2, track_id, class_id], dtype=np.int))
+            outputs.append([x1, y1, x2, y2, track_id, class_id])
         if len(outputs) > 0:
-            outputs = np.stack(outputs, axis=0)
+            outputs = np.array(outputs, dtype=np.int32)
         return outputs
 
     @staticmethod
@@ -131,7 +132,9 @@ class DeepSort(object):
 
     def _get_features(self, bbox_xywh, ori_img):
         im_crops = []
-
+        # reduce io-cost of for-loop
+        if bbox_xywh.device != "cpu":
+            bbox_xywh = bbox_xywh.cpu()
         for box in bbox_xywh:
             x1, y1, x2, y2 = self._s_tlwh_to_xyxy(box)
             im = ori_img[y1:y2, x1:x2]

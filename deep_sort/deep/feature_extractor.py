@@ -1,3 +1,5 @@
+import time
+
 import torch
 import torch.nn.functional as F
 import torchvision.transforms as transforms
@@ -18,7 +20,16 @@ class Extractor(object):
         self.net.eval()
         self.size = (64, 128)
 
-        self.__norm = transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+        self._mean = torch.as_tensor([0.485, 0.456, 0.406],
+                                     dtype=torch.float32,
+                                     device=self.device)[None, :, None, None]
+        self._std = torch.as_tensor([0.229, 0.224, 0.225],
+                                     dtype=torch.float32,
+                                     device=self.device)[None, :, None, None]
+
+    def __norm(self, tensor):
+        tensor.sub_(self._mean).div_(self._std)
+        return tensor
 
     def _preprocess(self, im_crops):
         """
@@ -35,8 +46,8 @@ class Extractor(object):
                 self.device).float().permute(2, 0, 1)
             return im
 
-        im_batch = torch.stack([self.__norm(_resize(im, self.size)) for im in im_crops], dim=0)
-        im_batch /= 255.
+        im_batch = torch.stack([_resize(im, self.size) for im in im_crops], dim=0).div(255.)
+        im_batch = self.__norm(im_batch)
         return im_batch
 
     def __call__(self, im_crops):
