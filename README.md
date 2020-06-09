@@ -1,23 +1,24 @@
 # yolo_deepsort
 
-基于yolo3/yolo4+deepsort的多目标追踪
+MOT base on yolo3/yolo4+deepsort
 
-## 主要依赖
+## Mainly dependent
 
 ```
 pytorch >= 1.3
 torchvision >= 0.4.0
+opencv-python >= 4.1
 ```
 
-## 快速开始
+## Quick start
 
-1. 克隆项目
+1. Clone the repositorty
 
 ```sh
 git clone https://github.com/GlassyWing/yolo_deepsort
 ```
 
-2. 下载yolo3或者yolo4模型文件
+2. Download weights of yolo3 or yolo4
 
 ```sh
 cd weights/
@@ -26,38 +27,51 @@ wget https://pjreddie.com/media/files/yolov3-tiny.weights
 wget https://drive.google.com/file/d/1cewMfusmPjYWbrnuJRuKhPMwRe_b9PaT/view
 ```
 
-3. 下载deepsort模型文件
+3. Download weights of DeepSort
 
 ```sh
 # download ckpt.t7 from
 https://drive.google.com/drive/folders/1xhG0kRH1EX5B9_Iz8gQJb7UNnn_riXi6 to this folder
 ```
 
-4. 运行
+4. Run example
 
 ```sh
 python video_deepsort.py
 ```
-若不想运行跟踪器，将参数`tracker`设为`None`即可：
+If you do not want to run the tracker, set the parameter `tracker` to `None`:
 
 ```
 video_detector = VideoDetector(...
                                tracker=None)
 ```
 
-## 示例
+## Example
 
 <img src="assets/track.gif">
 
-## 训练
+## Tests
 
-本仓库不包含可行的训练程序，训练请参考：
+| GPU    | MODEL                   | Predict time | FPS |
+| ------ | ----------------------- | ------------ | --- |
+| 1070Ti | YOLOv3-608              | 45ms         | 18  |
+| 1070Ti | YOLOv3-608-DeepSort     | 70ms         | 12  |
+| 1070Ti | YOLOv4-608              | 64ms         | 13  |
+| 1070Ti | YOLOv4-608-DeepSort     | 88ms         | 10  |
+| 1070Ti | YOLOv4-608-F16          | 52ms         | 16  |
+| 1070Ti | YOLOv4-608-F16-DeepSort | 74ms         | 11  |
 
-[yolo训练参考](https://github.com/AlexeyAB/darknet)
+There is a bottleneck in the opencv python version, that is to draw boxs, which will cause great IO consumption
 
-[deepsort训练参考](https://github.com/ZQPei/deep_sort_pytorch)
+## Training
 
-## 引用
+This library does not contain a feasible training program, please refer to the training:
+
+[yolo](https://github.com/AlexeyAB/darknet)
+
+[deepsort](https://github.com/ZQPei/deep_sort_pytorch)
+
+## References
 
 https://github.com/eriklindernoren/PyTorch-YOLOv3
 
