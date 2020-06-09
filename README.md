@@ -14,7 +14,7 @@ torchvision >= 0.4.0
 1. 克隆项目
 
 ```sh
-git clone https://github.com/GlassyWing/yolo3_deepsort
+git clone https://github.com/GlassyWing/yolo_deepsort
 ```
 
 2. 下载yolo3或者yolo4模型文件
