@@ -50,19 +50,6 @@ video_detector = VideoDetector(...
 
 <img src="assets/track.gif">
 
-## Tests
-
-| GPU    | MODEL                   | Predict time | FPS |
-| ------ | ----------------------- | ------------ | --- |
-| 1070Ti | YOLOv3-608              | 45ms         | 18  |
-| 1070Ti | YOLOv3-608-DeepSort     | 70ms         | 12  |
-| 1070Ti | YOLOv4-608              | 64ms         | 13  |
-| 1070Ti | YOLOv4-608-DeepSort     | 88ms         | 10  |
-| 1070Ti | YOLOv4-608-F16          | 52ms         | 16  |
-| 1070Ti | YOLOv4-608-F16-DeepSort | 74ms         | 11  |
-
-There is a bottleneck in the opencv python version, that is to draw boxs, which will cause great IO consumption
-
 ## Training
 
 This library does not contain a feasible training program, please refer to the training:
