@@ -43,6 +43,7 @@ class ImageDetector:
                  half=False):
         self.model = model
         self.model.eval()
+        self.device = next(self.model.parameters()).device
 
         if half:
             self.model.half()
@@ -57,9 +58,6 @@ class ImageDetector:
         self.overlap = overlap
 
     def detect(self, img):
-        image = cv2.resize(img, (self.model.img_size, self.model.img_size), interpolation=cv2.INTER_LINEAR)
-        image = torch.from_numpy(image).to(device="cuda:0" if torch.cuda.is_available() else "cpu")
-        image = image.permute((2, 0, 1)) / 255.
 
         h, w, _ = img.shape
 
@@ -67,6 +65,10 @@ class ImageDetector:
             win_width, win_height = self.win_size
 
         if self.win_size is None or w < win_width and h < win_height:
+
+            image = cv2.resize(img, (self.model.img_size, self.model.img_size), interpolation=cv2.INTER_LINEAR)
+            image = torch.from_numpy(image).to(self.device)
+            image = image.permute((2, 0, 1)) / 255.
 
             # image = scale(image, img.shape, self.model.img_size)
             # image, _ = pad_to_square(image, 0)
@@ -100,23 +102,29 @@ class ImageDetector:
             for x in range(0, w, win_width):
                 for y in range(0, h, win_height):
                     # 截取窗口大小的图像，再加上一些重叠区域
-                    img = image[:, y:y + win_height + overlap_y, x:x + win_width + overlap_x]
-                    truncated_images_ori_size.append((img.shape[1], img.shape[2]))
+                    img_sub = img[y:y + win_height + overlap_y, x:x + win_width + overlap_x]
+                    truncated_images_ori_size.append((img_sub.shape[0], img_sub.shape[1]))
+
+                    image = cv2.resize(img_sub, (self.model.img_size, self.model.img_size),
+                                       interpolation=cv2.INTER_LINEAR)
+                    truncated_images.append(image)
+
                     # img = scale(img, (img.shape[1], img.shape[2], img.shape[0]), self.model.img_size)
                     # img, _ = pad_to_square(img, 0)
-                    img = resize(img, (self.model.img_size, self.model.img_size))
+                    # img = resize(img, (self.model.img_size, self.model.img_size))
                     # cv2.imshow(str(x) + "-" + str(y), img.permute((1, 2, 0)).numpy())
 
-                    offset = torch.tensor([x, y, x, y], dtype=torch.float32, device=image.device)
-
+                    offset = torch.tensor([x, y, x, y], dtype=torch.float32, device=self.device)
                     if self.half:
                         offset = offset.half()
-                        img = img.half()
-
                     offsets.append(offset)
-                    truncated_images.append(img)
+
             # (n, model.img_size, model.img_size)
-            truncated_images = torch.stack(truncated_images, 0)
+            truncated_images = torch.from_numpy(np.stack(truncated_images, 0)).to(self.device)
+            truncated_images = truncated_images.permute((0, 3, 1, 2)) / 255.
+
+            if self.half:
+                truncated_images = truncated_images.half()
             prev_time = time.time()
             with torch.no_grad():
                 detections = self.model(truncated_images)
