@@ -76,7 +76,7 @@ def draw_single_img(img, detections, img_size,
         else:
             labels = []
             for detection in detections:
-                labels.append(classes[int(detection[-1])])
+                labels.append(classes[int(detection[-1])] + ' [' + str(round(detection[-2] * 100, 2)) + ']')
             draw_rects_and_labels(img, detections, colors, labels, thickness, font_size, font)
 
         if not only_rect and statistic:
