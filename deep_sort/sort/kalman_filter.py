@@ -146,12 +146,16 @@ class KalmanFilter:
         # (*, 4, 4)
         innovation_cov = torch.diag_embed(torch.pow(std, 2))
 
-        # (4, 8) dot (*, 8)
-        mean = torch.mm(mean, self._update_mat)  # (*, 4)
+        # # (4, 8) dot (*, 8)
+        # mean = torch.mm(mean, self._update_mat)  # (*, 4)
+        #
+        # # (*, 4, 4)
+        # covariance = torch.matmul(torch.matmul(covariance.permute(0, 2, 1), self._update_mat).permute(0, 2, 1),
+        #                           self._update_mat)
 
-        # (*, 4, 4)
-        covariance = torch.matmul(torch.matmul(covariance.permute(0, 2, 1), self._update_mat).permute(0, 2, 1),
-                                  self._update_mat)
+        # Simple way to reduce the amount of calculation
+        mean = mean[:, :4].clone()
+        covariance = covariance[:, :4, :4].clone()
         return mean, covariance + innovation_cov
 
     def update(self, mean, covariance, measurement):

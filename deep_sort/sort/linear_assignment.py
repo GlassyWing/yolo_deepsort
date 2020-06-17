@@ -50,9 +50,10 @@ def min_cost_matching(distance_metric, max_distance, tracks, detections, track_i
 
     cost_matrix = distance_metric(tracks, detections, track_indices, detection_indices)
     cost_matrix[cost_matrix > max_distance] = max_distance + 1e-5
+    cost_matrix = cost_matrix.cpu().numpy()
 
     # The linear assignment seems cannot be benifited with GPU
-    row_indices, col_indices = linear_assignment(cost_matrix.cpu().numpy())
+    row_indices, col_indices = linear_assignment(cost_matrix)
 
     matches, unmatched_tracks, unmatched_detections = [], [], []
     for col, detection_idx in enumerate(detection_indices):
