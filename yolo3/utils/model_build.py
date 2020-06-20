@@ -7,8 +7,8 @@ epsilon = 1e-16
 
 
 def resize_boxes(boxes, current_dim, original_shape):
-    h_ratio = original_shape[0] / current_dim
-    w_ratio = original_shape[1] / current_dim
+    h_ratio = original_shape[0] / current_dim[0]
+    w_ratio = original_shape[1] / current_dim[1]
     boxes[..., 0] *= w_ratio
     boxes[..., 1] *= h_ratio
     boxes[..., 2] *= w_ratio

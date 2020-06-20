@@ -64,7 +64,8 @@ def create_modules(module_defs):
             modules.add_module(f"maxpool_{module_i}", maxpool)
 
         elif module_def["type"] == "upsample":
-            upsample = Upsample(scale_factor=int(module_def["stride"]), mode="nearest")
+            # upsample = Upsample(scale_factor=int(module_def["stride"]), mode="nearest")
+            upsample = UpsampleExpand(stride=int(module_def["stride"]))
             modules.add_module(f"upsample_{module_i}", upsample)
 
         elif module_def["type"] == "route":
@@ -107,6 +108,24 @@ class Upsample(nn.Module):
         return x
 
 
+class UpsampleExpand(nn.Module):
+    """Another way of nearest up-sample, which is compatible with onnx """
+
+    def __init__(self, stride=2):
+        super(UpsampleExpand, self).__init__()
+        self.stride = stride
+
+    def forward(self, x):
+        stride = self.stride
+        assert (x.data.dim() == 4)
+        B = x.data.size(0)
+        C = x.data.size(1)
+        H = x.data.size(2)
+        W = x.data.size(3)
+        x = x.view(B, C, H, 1, W, 1).expand(B, C, H, stride, W, stride).contiguous().view(B, C, H * stride, W * stride)
+        return x
+
+
 class EmptyLayer(nn.Module):
     """Placeholder for 'route' and 'shortcut' layers"""
 
@@ -127,21 +146,24 @@ class YOLOLayer(nn.Module):
         self.obj_scale = 1
         self.noobj_scale = 100
         self.metrics = {}
-        self.img_dim = img_dim
+        self.img_dim = (img_dim, img_dim) if type(img_dim) == int else img_dim
         self.grid_size = 0
         self.lock = threading.Lock()
 
-    def compute_grid_offsets(self, grid_size,  device, dtype):
+    def compute_grid_offsets(self, grid_size, device, dtype):
         self.grid_size = g = grid_size
-        self.scale = self.img_dim / self.grid_size
+        self.scale = torch.as_tensor([[self.img_dim[0] / self.grid_size[0],
+                                       self.img_dim[1] / self.grid_size[1]]],
+                                     dtype=dtype,
+                                     device=device)
 
-        grid_y, grid_x = torch.meshgrid([torch.arange(g, dtype=torch.int32, device=device),
-                                         torch.arange(g, dtype=torch.int32, device=device)])
+        grid_y, grid_x = torch.meshgrid([torch.arange(g[0], dtype=torch.int32, device=device),
+                                         torch.arange(g[1], dtype=torch.int32, device=device)])
         grid_y = grid_y.type(dtype)
         grid_x = grid_x.type(dtype)
 
         # reshape to (batch, num_anchor, height, width, 2)
-        self.grid = torch.stack((grid_x.flatten(), grid_y.flatten()), 1).view((1, 1, g, g, 2))
+        self.grid = torch.stack((grid_x.flatten(), grid_y.flatten()), 1).view((1, 1, g[0], g[1], 2))
         self.scaled_anchors = torch.tensor(self.anchors, dtype=dtype, device=device) / self.scale
 
         self.anchor = self.scaled_anchors.view((1, self.num_anchors, 1, 1, 2))
@@ -157,10 +179,10 @@ class YOLOLayer(nn.Module):
 
         self.img_dim = img_dim
         num_samples = x.size(0)
-        grid_size = x.size(2)
+        grid_size = x.size(2), x.size(3)
 
         # reshape to (batch, num_anchors, width, height, 5 + num_classes)
-        prediction = x.view(num_samples, self.num_anchors, self.num_classes + 5, grid_size, grid_size) \
+        prediction = x.view(num_samples, self.num_anchors, self.num_classes + 5, *grid_size) \
             .permute(0, 1, 3, 4, 2) \
             .contiguous()
 
@@ -181,7 +203,7 @@ class YOLOLayer(nn.Module):
         # (batch, width * height * num_anchor, 5 + num_classes)
         output = torch.cat(
             (
-                pred_boxes.view(num_samples, -1, 4) * self.scale,
+                pred_boxes.view(num_samples, -1, 4) * self.scale.repeat(1, 2),
                 pred_conf.view((num_samples, -1, 1)),
                 pred_cls.view((num_samples, -1, self.num_classes))
             ),
@@ -251,12 +273,14 @@ class Darknet(nn.Module):
         self.hyperparams, self.module_list = create_modules(self.module_defs)
         logging.info("Reading config done")
         self.yolo_layers = [layer[0] for layer in self.module_list if hasattr(layer[0], "metrics")]
-        self.img_size = img_size
+
+        # The image shape to be detect in form of (height, width)
+        self.img_size = (img_size, img_size) if type(img_size) == int else img_size
         self.seen = 0
         self.header_info = np.array([0, 0, 0, self.seen, 0], dtype=np.int32)
 
     def forward(self, x, targets=None):
-        img_dim = x.shape[2]
+        img_dim = x.shape[2], x.shape[3]
         loss = 0
         layer_outputs, yolo_outputs = [], []
         for i, (module_def, module) in enumerate(zip(self.module_defs, self.module_list)):

@@ -66,7 +66,7 @@ class ImageDetector:
 
         if self.win_size is None or w < win_width and h < win_height:
 
-            image = cv2.resize(img, (self.model.img_size, self.model.img_size), interpolation=cv2.INTER_LINEAR)
+            image = cv2.resize(img, (self.model.img_size[1], self.model.img_size[0]), interpolation=cv2.INTER_LINEAR)
             image = torch.from_numpy(image).to(self.device)
             image = image.permute((2, 0, 1)) / 255.
 
@@ -105,7 +105,7 @@ class ImageDetector:
                     img_sub = img[y:y + win_height + overlap_y, x:x + win_width + overlap_x]
                     truncated_images_ori_size.append((img_sub.shape[0], img_sub.shape[1]))
 
-                    image = cv2.resize(img_sub, (self.model.img_size, self.model.img_size),
+                    image = cv2.resize(img_sub, (self.model.img_size[1], self.model.img_size[0]),
                                        interpolation=cv2.INTER_LINEAR)
                     truncated_images.append(image)
 
