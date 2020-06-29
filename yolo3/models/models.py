@@ -71,11 +71,18 @@ def create_modules(module_defs):
         elif module_def["type"] == "route":
             layers = [int(x) for x in module_def["layers"].split(",")]
             filters = sum([output_filters[1:][i] for i in layers])
-            modules.add_module(f"route_{module_i}", EmptyLayer())
+            if "groups" in module_def:
+                groups = int(module_def["groups"])
+                filters //= groups
+                group_id = int(module_def["group_id"])
+            else:
+                groups = None
+                group_id = None
+            modules.add_module(f"route_{module_i}", RouteLayer(groups, group_id))
 
         elif module_def["type"] == "shortcut":
             filters = output_filters[1:][int(module_def["from"])]
-            modules.add_module(f"shortcut_{module_i}", EmptyLayer())
+            modules.add_module(f"shortcut_{module_i}", Shortcut())
 
         elif module_def["type"] == "yolo":
             anchor_idxs = [int(x) for x in module_def["mask"].split(",")]
@@ -126,11 +133,18 @@ class UpsampleExpand(nn.Module):
         return x
 
 
-class EmptyLayer(nn.Module):
-    """Placeholder for 'route' and 'shortcut' layers"""
+class Shortcut(nn.Module):
 
     def __init__(self):
-        super(EmptyLayer, self).__init__()
+        super().__init__()
+
+
+class RouteLayer(nn.Module):
+
+    def __init__(self, groups=None, group_id=None):
+        super().__init__()
+        self.groups = groups
+        self.group_id = group_id
 
 
 class YOLOLayer(nn.Module):
@@ -285,6 +299,8 @@ class Darknet(nn.Module):
                 x = module(x)
             elif type == "route":
                 x = torch.cat([layer_outputs[int(layer_i)] for layer_i in module_def['layers'].split(',')], 1)
+                if "groups" in module_def:
+                   x = x.chunk(module[0].groups, dim=1)[module[0].group_id]
             elif type == "shortcut":
                 layer_i = int(module_def["from"])
                 x = layer_outputs[-1] + layer_outputs[layer_i]
