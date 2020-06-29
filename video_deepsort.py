@@ -16,13 +16,13 @@ if __name__ == '__main__':
 
     # 跟踪器
     tracker = DeepSort("weights/ckpt.t7",
-                       min_confidence=0.5,
+                       min_confidence=1,
                        use_cuda=True,
                        nn_budget=30,
-                       n_init=10,
+                       n_init=3,
                        max_iou_distance=0.7,
-                       max_dist=0.2,
-                       max_age=70)
+                       max_dist=0.3,
+                       max_age=30)
 
     # Action Identify
     # action_id = ActionIdentify(actions=[TakeOff(4, delta=(0, 1)),
@@ -34,11 +34,11 @@ if __name__ == '__main__':
     #                            max_size=8)
 
     video_detector = VideoDetector(model, "config/coco.names",
-                                   #font_path="font/sarasa-bold.ttc",
-                                   font_size=7,
+                                   #font_path="font/Noto_Serif_SC/NotoSerifSC-Regular.otf",
+                                   #font_size=14,
                                    thickness=2,
                                    skip_frames=2,
-                                   conf_thres=0.5,
+                                   thres=0.5,
                                    class_mask=[0, 2, 4],
                                    nms_thres=0.4,
                                    tracker=tracker,
@@ -47,6 +47,6 @@ if __name__ == '__main__':
     for image, detections, _ in video_detector.detect(0,
                                                       # output_path="../data/output.ts",
                                                       real_show=True,
-                                                      skip_secs=30):
+                                                      skip_secs=0):
         # print(detections)
         pass

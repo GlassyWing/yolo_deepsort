@@ -41,7 +41,7 @@ class VideoDetector:
                  thickness=2,
                  font_path=None,
                  font_size=10,
-                 conf_thres=0.7,
+                 thres=0.7,
                  nms_thres=0.4,
                  skip_frames=-1,
                  fourcc=cv2.VideoWriter_fourcc('m', 'p', '4', 'v'),
@@ -64,7 +64,7 @@ class VideoDetector:
 
         self.image_detector = ImageDetector(model, class_path,
                                             thickness=thickness,
-                                            conf_thres=conf_thres,
+                                            thres=thres,
                                             nms_thres=nms_thres,
                                             win_size=win_size,
                                             overlap=overlap,
@@ -105,7 +105,7 @@ class VideoDetector:
 
         if real_show:
             cv2.namedWindow("result", cv2.WINDOW_NORMAL)
-            cv2.resizeWindow("result", 800, 600)
+            cv2.resizeWindow("result", 960, 540)
             pass
         fvs.start()
 
@@ -122,7 +122,7 @@ class VideoDetector:
             while fvs.more():
                 frame = fvs.read()
 
-                # frame = cv2.resize(frame, (640, 480))
+                #frame = cv2.resize(frame, (608, 608), interpolation=cv2.INTER_LINEAR)
                 # frame = cv2.hconcat([frame, frame, frame])
 
                 if frame is None:

@@ -36,7 +36,7 @@ class ImageDetector:
     """图像检测器，只检测单张图片"""
 
     def __init__(self, model, class_path, thickness=2,
-                 conf_thres=0.5,
+                 thres=0.5,
                  nms_thres=0.4,
                  win_size=None,
                  overlap=0.15,
@@ -51,7 +51,7 @@ class ImageDetector:
         self.classes = load_classes(class_path)
         self.num_classes = len(self.classes)
         self.thickness = thickness
-        self.conf_thres = conf_thres
+        self.thres = thres
         self.nms_thres = nms_thres
         self.half = half
         self.win_size = win_size
@@ -83,7 +83,7 @@ class ImageDetector:
             prev_time = time.time()
             with torch.no_grad():
                 detections = self.model(image)
-                detections = non_max_suppression(detections, self.conf_thres, self.nms_thres)
+                detections = non_max_suppression(detections, self.thres, self.nms_thres)
                 detections = detections[0]
                 if detections is not None:
                     # detections = rescale_boxes(detections, self.model.img_size, (h, w))
@@ -140,7 +140,7 @@ class ImageDetector:
                 # (1, n, 5 + num_class)
                 rescaled_detections = torch.cat(rescaled_detections, 0).unsqueeze(0)
 
-                detections = non_max_suppression(rescaled_detections, self.conf_thres, self.nms_thres, is_p1p2=True)
+                detections = non_max_suppression(rescaled_detections, self.thres, self.nms_thres, is_p1p2=True)
                 detections = detections[0]
 
             current_time = time.time()

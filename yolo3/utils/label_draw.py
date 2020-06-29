@@ -2,13 +2,14 @@ import logging
 
 import cv2
 import numpy as np
-
+import time
 
 def _get_statistic_info(detections, unique_labels, classes):
     """获得统计信息"""
     statistic_info = {}
     for label in unique_labels:
-        statistic_info[classes[int(label)]] = (detections[:, -1] == label).sum().item()
+        statistic_info[classes[int(label)]] = (
+            detections[:, -1] == label).sum().item()
     return statistic_info
 
 
@@ -35,21 +36,28 @@ def draw_rects_and_labels(img, dets, colors, labels, thickness, font_size, font=
         cv2.rectangle(img, c1, c2, colors[cls], thickness)
 
         if font is not None:
-            font_w, font_h = font.getTextSize(labels[i], font_size, -1)
+            text_size, _ = font.getTextSize(labels[i], font_size, -1)
+            font_w, font_h = text_size
+            cv2.rectangle(img, (c1[0], max(0, c1[1] - 3 - font_size)),
+                          (c1[0] + font_w, max(c1[1], 3 + font_size)), colors[cls], -1)
             font.putText(img=img,
                          text=labels[i],
-                         org=(c1[0], max(c1[1] - 5, font_h)),
+                         org=(c1[0], max(c1[1] - 3, font_size)),
                          fontHeight=font_size,
-                         color=(255, 255, 255),
+                         color=(0, 0, 0),
                          thickness=-1,
-                         line_type=cv2.LINE_AA,
+                         line_type=cv2.LINE_4,
                          bottomLeftOrigin=True)
         else:
-            font_w, font_h = cv2.getTextSize(labels[i], cv2.FONT_HERSHEY_COMPLEX, font_size / 10, 2)
+            text_size, _ = cv2.getTextSize(
+                labels[i], cv2.FONT_HERSHEY_COMPLEX_SMALL, font_size, 1)
+            font_w, font_h = text_size
+            cv2.rectangle(img, (c1[0], max(0, int( c1[1] - 3 - 18 * font_size))),
+                          (c1[0] + font_w, max(c1[1], int(3 + 18 * font_size))), colors[cls], -1)
             cv2.putText(img,
                         labels[i],
-                        (c1[0], max(c1[1] - 5, font_h)), cv2.FONT_HERSHEY_SIMPLEX, font_size / 10,
-                        (255, 255, 255), 2)
+                        (c1[0], max(c1[1] - 3, font_h)), cv2.FONT_HERSHEY_COMPLEX_SMALL, font_size,
+                        (0, 0, 0), 2)
     return img
 
 
@@ -69,16 +77,18 @@ def draw_single_img(img, detections, img_size,
         detections = detections.cpu().float().numpy()
         if statistic:
             unique_labels = detections[:, -1].unique()
-            statistic_info = _get_statistic_info(detections, unique_labels, classes)
-
+            statistic_info = _get_statistic_info(
+                detections, unique_labels, classes)
+        
         if only_rect:
             draw_rects(img, detections, colors, thickness)
         else:
             labels = []
             for detection in detections:
                 labels.append(classes[int(detection[-1])] +
-                              ' [' + str(round(detection[-3] * detection[-2] * 100, 2)) + ']')
-            draw_rects_and_labels(img, detections, colors, labels, thickness, font_size, font)
+                              ' (' + str(round(detection[-3] * detection[-2] * 100, 2)) + '%)')
+            draw_rects_and_labels(img, detections, colors,
+                                  labels, thickness, font_size, font)
 
         if not only_rect and statistic:
             # 绘制统计信息
@@ -128,9 +138,11 @@ class LabelDrawer:
 
         # Prepare colors for each class
         np.random.seed(1)
-        self.colors = (np.random.rand(min(999, num_classes), 3) * 255).astype(int)
+        self.colors = (np.random.rand(
+            min(999, num_classes), 3) * 255).astype(int)
         np.random.seed(None)
-        self.colors = [(int(color[0]), int(color[1]), int(color[2])) for color in self.colors]
+        self.colors = [(int(color[0]), int(color[1]), int(color[2]))
+                       for color in self.colors]
 
     def clone(self):
         return LabelDrawer(self.classes, self.font_path, self.font_size, self.thickness,
@@ -144,7 +156,7 @@ class LabelDrawer:
                                statistic=self.statistic,
                                scaled=scaled,
                                only_rect=only_rect,
-                               font_size=self.font_size)
+                               font_size=img.shape[0] / 1000. if self.font is None else self.font_size)
 
     def draw_labels_by_trackers(self, img, detections, only_rect):
 
@@ -155,9 +167,11 @@ class LabelDrawer:
             labels = []
             for detection in detections:
                 if self.id2label is not None and str(int(detection[4])) in self.id2label:
-                    label = str(int(detection[4])) + ":" + self.id2label[str(int(detection[4]))]
+                    label = str(int(detection[4])) + ":" + \
+                        self.id2label[str(int(detection[4]))]
                 else:
-                    label = str(int(detection[4])) + ":" + self.classes[int(detection[-1])]
+                    label = str(int(detection[4])) + ":" + \
+                        self.classes[int(detection[-1])]
                 labels.append(label)
 
             # 绘制所有标签
@@ -166,7 +180,7 @@ class LabelDrawer:
                                   self.colors,
                                   labels,
                                   self.thickness,
-                                  self.font_size,
+                                  img.shape[0] / 1000. if self.font is None else self.font_size,
                                   self.font)
 
         return img, None, None

@@ -183,20 +183,16 @@ class YOLOLayer(nn.Module):
 
         # reshape to (batch, num_anchors, width, height, 5 + num_classes)
         prediction = x.view(num_samples, self.num_anchors, self.num_classes + 5, *grid_size) \
-            .permute(0, 1, 3, 4, 2) \
-            .contiguous()
+            .permute(0, 1, 3, 4, 2)
 
         xy = torch.sigmoid(prediction[..., 0:2])  # Center (x, y)
         wh = prediction[..., 2:4]  # (width, height)
-        pred_conf = torch.sigmoid(prediction[..., 4])  # Conf
-        pred_cls = torch.sigmoid(prediction[..., 5:])  # Cls pred.
+        pred_conf_cls = torch.sigmoid(prediction[..., 4:])  # Conf +  Cls pred.
+        pred_conf = pred_conf_cls[..., 0]
+        pred_cls = pred_conf_cls[..., 1:]
 
-        self.lock.acquire()
-        try:
-            if grid_size != self.grid_size:
-                self.compute_grid_offsets(grid_size, x.device, x.dtype)
-        finally:
-            self.lock.release()
+        if grid_size != self.grid_size:
+            self.compute_grid_offsets(grid_size, x.device, x.dtype)
 
         pred_boxes = torch.cat([xy.detach() + self.grid, torch.exp(wh.detach()) * self.anchor], dim=-1)
 

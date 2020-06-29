@@ -46,13 +46,13 @@ def rescale_boxes(boxes, current_dim, original_shape):
     return boxes
 
 
-def non_max_suppression(prediction, conf_thres=0.5, nms_thres=0.4, is_p1p2=False):
+def non_max_suppression(prediction, thres=0.5, nms_thres=0.4, is_p1p2=False):
     """
     Removes detections with lower object confidence score than 'conf_thres' and performs
     Non-Maximum Suppression to further filter detections.
 
     :param prediction: (batch, height * width * num_anchors, 5 + num_classes)
-    :param conf_thres:
+    :param thres:
     :param nms_thres:
     :return: detections with shape (x1, y1, x2, y2, object_conf, class_score, class_pred)
     """
@@ -60,17 +60,20 @@ def non_max_suppression(prediction, conf_thres=0.5, nms_thres=0.4, is_p1p2=False
         prediction[..., :4] = xywh2p1p2(prediction[..., :4])
     output = [None for _ in range(len(prediction))]
     for image_i, image_pred in enumerate(prediction):
-        image_pred = image_pred[image_pred[:, 4] >= conf_thres]
+        class_confs, class_preds = image_pred[:, 5:].max(1, keepdim=True)
+        # Object confidence times class confidence  (n, ) * (n, )
+        score = image_pred[:, 4] * class_confs[:, 0]
+        mask = score >= thres
+
+        image_pred = image_pred[mask]
+        class_confs = class_confs[mask]
+        class_preds = class_preds[mask]
+        score = score[mask]
 
         # If none anchor are remaining => process next image
         if not image_pred.size(0):
             continue
-
-        # Object confidence times class confidence  (n, ) * (n, )
-        score = image_pred[:, 4] * image_pred[:, 5:].max(1)[0]
-        # Sort by it
-        # image_pred = image_pred[(-score).argsort()]
-        class_confs, class_preds = image_pred[:, 5:].max(1, keepdim=True)
+        
 
         detections = torch.cat((image_pred[:, :5],
                                 class_confs.type(prediction.dtype),
