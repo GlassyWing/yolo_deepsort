@@ -104,6 +104,7 @@ def process(annotation, images_dir, coco_dir, names, categories, is_train):
 
     # Make labels dir
     labels_dir = os.path.join(coco_dir, "labels")
+    labels_dir = images_dir
     os.makedirs(labels_dir, exist_ok=True)
 
     logging.info("Writing labels.")
@@ -162,7 +163,7 @@ if __name__ == '__main__':
     filter_mode = args.filter_mode
 
     if filter is not None:
-        logging.info("Filter opened, mode: " + filter_mode + " , the classes to be filter: " + filter)
+        logging.info("Filter opened, mode: " + filter_mode + " , the classes to be filter: " + str(filter))
 
     is_train_exist = os.path.exists(train_images)
     is_val_exist = os.path.exists(val_images)
