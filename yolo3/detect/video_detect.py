@@ -31,7 +31,9 @@ def alpha_composite(img, plane):
 
 
 def _transform(frame):
-    return cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    if frame is not None:
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    return frame
 
 
 class VideoDetector:
