@@ -3,7 +3,7 @@ import time
 import numpy as np
 import torch
 
-from .deep.feature_extractor import Extractor
+from .deep.engine.defaults import DefaultPredictor as Extractor
 from .sort.detection import Detection
 from .sort.nn_matching import NearestNeighborDistanceMetric
 from .sort.preprocessing import non_max_suppression
@@ -13,7 +13,7 @@ __all__ = ['DeepSort']
 
 
 class DeepSort(object):
-    def __init__(self, model_path, max_dist=0.2, min_confidence=0.3, nms_max_overlap=1.0, max_iou_distance=0.7,
+    def __init__(self, model_cfg, max_dist=0.2, min_confidence=0.3, nms_max_overlap=1.0, max_iou_distance=0.7,
                  max_age=70, n_init=3, nn_budget=100,
                  use_cuda=False):
         self.max_dist = max_dist
@@ -25,10 +25,10 @@ class DeepSort(object):
         self.nn_budget = nn_budget
         self.use_cuda = use_cuda
 
-        if type(model_path) == str:
-            self.extractor = Extractor(model_path, use_cuda=use_cuda)
+        if type(model_cfg) == dict:
+            self.extractor = Extractor(model_cfg)
         else:
-            self.extractor = model_path
+            self.extractor = model_cfg
 
         max_cosine_distance = max_dist
         metric = NearestNeighborDistanceMetric("cosine", max_cosine_distance, nn_budget)
