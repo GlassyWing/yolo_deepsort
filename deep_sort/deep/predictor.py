@@ -9,6 +9,7 @@ import bisect
 from concurrent.futures import ThreadPoolExecutor
 
 import cv2
+import numpy as np
 import torch
 import torch.multiprocessing as mp
 from collections import deque
@@ -38,11 +39,15 @@ class FeatureExtractor(object):
         else:
             self.predictor = DefaultPredictor(cfg)
 
+        self.pixel_mean = np.array(cfg.MODEL.PIXEL_MEAN)
+        self.pixel_std = np.array(cfg.MODEL.PIXEL_STD)
+
     def _pre_process(self, image):
         # the model expects RGB inputs
         original_image = image[:, :, ::-1]
         # Apply pre-processing to image.
         image = cv2.resize(original_image, tuple(self.cfg.INPUT.SIZE_TEST[::-1]), interpolation=cv2.INTER_LINEAR)
+        image = (image - self.pixel_mean) / self.pixel_std
         return image
 
     def run_on_image(self, original_image):
@@ -62,7 +67,7 @@ class FeatureExtractor(object):
                 images.append(image)
         # Make shape with a new batch dimension which is adapted for
         # network input
-        image = torch.as_tensor(images, dtype=torch.float32).permute(0, 3, 1, 2)
+        image = torch.from_numpy(np.stack(images, 0)).float().permute(0, 3, 1, 2)
         predictions = self.predictor(image)
         return predictions
 
