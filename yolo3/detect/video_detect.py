@@ -121,7 +121,7 @@ class VideoDetector:
 
         frames = 0
         try:
-            while fvs.more():
+            while True:
                 frame = fvs.read()
 
                 #frame = cv2.resize(frame, (608, 608), interpolation=cv2.INTER_LINEAR)

@@ -3,7 +3,7 @@ import time
 import numpy as np
 import torch
 
-from .deep.engine.defaults import DefaultPredictor as Extractor
+from .deep.predictor import FeatureExtractor as Extractor
 from .sort.detection import Detection
 from .sort.nn_matching import NearestNeighborDistanceMetric
 from .sort.preprocessing import non_max_suppression
@@ -13,7 +13,7 @@ __all__ = ['DeepSort']
 
 
 class DeepSort(object):
-    def __init__(self, model_cfg, max_dist=0.2, min_confidence=0.3, nms_max_overlap=1.0, max_iou_distance=0.7,
+    def __init__(self, extractor_or_cfg, max_dist=0.2, min_confidence=0.3, nms_max_overlap=1.0, max_iou_distance=0.7,
                  max_age=70, n_init=3, nn_budget=100,
                  use_cuda=False):
         self.max_dist = max_dist
@@ -25,10 +25,11 @@ class DeepSort(object):
         self.nn_budget = nn_budget
         self.use_cuda = use_cuda
 
-        if type(model_cfg) == dict:
-            self.extractor = Extractor(model_cfg)
+        if type(extractor_or_cfg) == Extractor:
+            self.extractor = extractor_or_cfg
+
         else:
-            self.extractor = model_cfg
+            self.extractor = Extractor(extractor_or_cfg)
 
         max_cosine_distance = max_dist
         metric = NearestNeighborDistanceMetric("cosine", max_cosine_distance, nn_budget)
@@ -116,9 +117,9 @@ class DeepSort(object):
     def _s_tlwh_to_xyxy(self, bbox_tlwh):
         x, y, w, h = bbox_tlwh
         x1 = max(int(x), 0)
-        x2 = min(int(x + w ), self.width - 1)
+        x2 = min(int(x + w), self.width - 1)
         y1 = max(int(y), 0)
-        y2 = min(int(y + h ), self.height - 1)
+        y2 = min(int(y + h), self.height - 1)
         return x1, y1, x2, y2
 
     def _xyxy_to_tlwh(self, bbox_xyxy):
@@ -140,7 +141,7 @@ class DeepSort(object):
             im = ori_img[y1:y2, x1:x2]
             im_crops.append(im)
         if im_crops:
-            features = self.extractor(im_crops).to(self.tracker.device)
+            features = self.extractor.run_on_image(im_crops).to(self.tracker.device)
         else:
             features = np.array([])
         return features

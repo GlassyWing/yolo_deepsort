@@ -18,10 +18,7 @@ import torch
 import torch.nn.functional as F
 from torch.nn.parallel import DistributedDataParallel
 
-from deep_sort.deep.evaluation import (DatasetEvaluator, ReidEvaluator,
-                                 inference_on_dataset, print_csv_format)
 from deep_sort.deep.modeling.meta_arch import build_model
-from deep_sort.deep.solver import build_lr_scheduler, build_optimizer
 from deep_sort.deep.utils import comm
 from deep_sort.deep.utils.env import seed_all_rng
 from deep_sort.deep.utils.checkpoint import Checkpointer
@@ -29,8 +26,6 @@ from deep_sort.deep.utils.collect_env import collect_env_info
 from deep_sort.deep.utils.events import CommonMetricPrinter, JSONWriter, TensorboardXWriter
 from deep_sort.deep.utils.file_io import PathManager
 from deep_sort.deep.utils.logger import setup_logger
-from . import hooks
-from .train_loop import SimpleTrainer
 
 __all__ = ["default_argument_parser", "default_setup", "DefaultPredictor"]
 
