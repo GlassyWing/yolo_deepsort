@@ -7,7 +7,7 @@
 import atexit
 import bisect
 from concurrent.futures import ThreadPoolExecutor
-
+import time
 import cv2
 import numpy as np
 import torch
@@ -32,6 +32,7 @@ class FeatureExtractor(object):
         """
         self.cfg = cfg
         self.parallel = parallel
+        self.is_run_on_cpu = self.cfg.MODEL.DEVICE == "cpu"
 
         if parallel:
             self.num_gpus = torch.cuda.device_count()
@@ -39,15 +40,23 @@ class FeatureExtractor(object):
         else:
             self.predictor = DefaultPredictor(cfg)
 
-        self.pixel_mean = np.array(cfg.MODEL.PIXEL_MEAN)
-        self.pixel_std = np.array(cfg.MODEL.PIXEL_STD)
+        self.pixel_mean = torch.as_tensor(cfg.MODEL.PIXEL_MEAN)[None, :, None, None]
+        self.pixel_std = torch.as_tensor(cfg.MODEL.PIXEL_STD)[None, :, None, None]
+
+        if not self.is_run_on_cpu:
+            self.pixel_mean = self.pixel_mean.cuda()
+            self.pixel_std = self.pixel_std.cuda()
 
     def _pre_process(self, image):
         # the model expects RGB inputs
         original_image = image[:, :, ::-1]
         # Apply pre-processing to image.
-        image = cv2.resize(original_image, tuple(self.cfg.INPUT.SIZE_TEST[::-1]), interpolation=cv2.INTER_LINEAR)
-        image = (image - self.pixel_mean) / self.pixel_std
+        image = cv2.resize(original_image, (64, 128), interpolation=cv2.INTER_LINEAR)
+        image = torch.from_numpy(image)
+        if not self.is_run_on_cpu:
+            image = image.cuda()
+
+        image = image.float().permute(2, 0, 1)
         return image
 
     def run_on_image(self, original_image):
@@ -62,13 +71,12 @@ class FeatureExtractor(object):
         """
 
         images = []
-        with ThreadPoolExecutor() as executor:
-            for image in executor.map(lambda img: self._pre_process(img), original_image):
-                images.append(image)
+        for image in original_image:
+            images.append(self._pre_process(image))
         # Make shape with a new batch dimension which is adapted for
         # network input
-        image = torch.from_numpy(np.stack(images, 0)).float().permute(0, 3, 1, 2)
-        predictions = self.predictor(image)
+        images = torch.stack(images, dim=0).sub_(self.pixel_mean).div_(self.pixel_std)
+        predictions = self.predictor(images)
         return predictions
 
     def run_on_loader(self, data_loader):

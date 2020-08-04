@@ -146,9 +146,6 @@ class DefaultPredictor:
         inputs = {"images": image}
         with torch.no_grad():  # https://github.com/sphinx-doc/sphinx/issues/4258
             predictions = self.model(inputs)
-            # Normalize feature to compute cosine distance
-            pred_feat = F.normalize(predictions)
-            pred_feat = pred_feat.cpu().data
-            return pred_feat
+            return predictions
 
 
