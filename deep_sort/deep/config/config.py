@@ -157,3 +157,12 @@ def get_cfg() -> CfgNode:
     from .defaults import _C
 
     return _C.clone()
+
+
+def setup_cfg(args):
+    # load config from file and command-line arguments
+    cfg = get_cfg()
+    cfg.merge_from_file(args['config_file'])
+    cfg.merge_from_list(args['opts'])
+    cfg.freeze()
+    return cfg

@@ -40,13 +40,6 @@ class FeatureExtractor(object):
         else:
             self.predictor = DefaultPredictor(cfg)
 
-        self.pixel_mean = torch.as_tensor(cfg.MODEL.PIXEL_MEAN)[None, :, None, None]
-        self.pixel_std = torch.as_tensor(cfg.MODEL.PIXEL_STD)[None, :, None, None]
-
-        if not self.is_run_on_cpu:
-            self.pixel_mean = self.pixel_mean.cuda()
-            self.pixel_std = self.pixel_std.cuda()
-
     def _pre_process(self, image):
         # the model expects RGB inputs
         original_image = image[:, :, ::-1]
@@ -75,8 +68,7 @@ class FeatureExtractor(object):
             images.append(self._pre_process(image))
         # Make shape with a new batch dimension which is adapted for
         # network input
-        images = torch.stack(images, dim=0).sub_(self.pixel_mean).div_(self.pixel_std)
-        predictions = self.predictor(images)
+        predictions = self.predictor(torch.stack(images, dim=0))
         return predictions
 
     def run_on_loader(self, data_loader):
