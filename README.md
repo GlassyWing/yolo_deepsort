@@ -46,6 +46,10 @@ video_detector = VideoDetector(...
                                tracker=None)
 ```
 
+## Replacing Re-ID
+
+Please read the [tutorial](docs/how_to_replace_reid.md).
+
 ## Example
 
 <img src="assets/track.gif">
@@ -57,10 +61,6 @@ This library does not contain a feasible training program, please refer to the t
 [yolo](https://github.com/AlexeyAB/darknet)
 
 [deepsort](https://github.com/ZQPei/deep_sort_pytorch)
-
-## Replacing Re-ID
-
-Please read the [tutorial](docs/how_to_replace_reid.md).
 
 ## References
 
