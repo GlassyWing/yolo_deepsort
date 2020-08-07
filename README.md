@@ -58,6 +58,10 @@ This library does not contain a feasible training program, please refer to the t
 
 [deepsort](https://github.com/ZQPei/deep_sort_pytorch)
 
+## Replacing Re-ID
+
+Please read the [tutorial](docs/how_to_replace_reid.md).
+
 ## References
 
 https://github.com/eriklindernoren/PyTorch-YOLOv3
