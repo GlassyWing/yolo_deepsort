@@ -11,7 +11,7 @@ if __name__ == '__main__':
     LOG_FORMAT = "%(asctime)s - %(levelname)s - %(message)s"
     logging.basicConfig(level=logging.INFO, format=LOG_FORMAT)
 
-    device = "cuda:0"
+    device = "cpu"
 
     # Initialize Darknet.
     model = Darknet("config/yolov4-tiny.cfg", img_size=(608, 608))
@@ -23,8 +23,7 @@ if __name__ == '__main__':
     # Set params for fast-reid
     cfg = setup_cfg({"config_file": "config/deep/darknet.yml",
                      "opts": ["MODEL.WEIGHTS",
-                              "weights/model_darknet.pth",
-
+                              "weights/model_final.pth",
                               "MODEL.DEVICE",
                               device]})
 
@@ -34,7 +33,7 @@ if __name__ == '__main__':
                        nn_budget=30,
                        n_init=3,
                        max_iou_distance=0.7,
-                       max_dist=0.6,
+                       max_dist=0.5,
                        max_age=30)
 
     # Action Identify
@@ -47,15 +46,15 @@ if __name__ == '__main__':
     #                            max_size=8)
 
     video_detector = VideoDetector(model, "config/coco.names",
-                                   font_path="font/NotoSansSC-Regular.otf",
-                                   font_size=14,
+                                   #font_path="font/NotoSansSC-Regular.otf",
+                                   #font_size=14,
                                    thickness=2,
                                    skip_frames=1,
                                    thres=0.2,
                                    class_mask=[0, 2, 4],
-                                   nms_thres=0.2,
+                                   nms_thres=0.4,
                                    tracker=tracker,
-                                   half=True)
+                                   half=False)
 
     for image, detections, _ in video_detector.detect(
             0,
