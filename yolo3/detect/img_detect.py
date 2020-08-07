@@ -15,7 +15,8 @@ from torch.autograd import Variable
 
 from yolo3.dataset.dataset import pad_to_square, resize
 from yolo3.utils.helper import load_classes
-from yolo3.utils.model_build import non_max_suppression, rescale_boxes, xywh2p1p2, resize_boxes
+from yolo3.utils.model_build import non_max_suppression, rescale_boxes, xywh2p1p2, resize_boxes, \
+    soft_non_max_suppression
 
 
 def scale(image, shape, max_size):
@@ -83,7 +84,7 @@ class ImageDetector:
             prev_time = time.time()
             with torch.no_grad():
                 detections = self.model(image)
-                detections = non_max_suppression(detections, self.thres, self.nms_thres)
+                detections = soft_non_max_suppression(detections, self.thres, self.nms_thres)
                 detections = detections[0]
                 if detections is not None:
                     # detections = rescale_boxes(detections, self.model.img_size, (h, w))
@@ -140,7 +141,9 @@ class ImageDetector:
                 # (1, n, 5 + num_class)
                 rescaled_detections = torch.cat(rescaled_detections, 0).unsqueeze(0)
 
-                detections = non_max_suppression(rescaled_detections, self.thres, self.nms_thres, is_p1p2=True)
+                detections = soft_non_max_suppression(rescaled_detections, self.thres, self.nms_thres,
+                                                      merge=True,
+                                                      is_p1p2=True)
                 detections = detections[0]
 
             current_time = time.time()

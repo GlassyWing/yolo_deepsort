@@ -4,12 +4,13 @@ import cv2
 import numpy as np
 import time
 
+
 def _get_statistic_info(detections, unique_labels, classes):
     """获得统计信息"""
     statistic_info = {}
     for label in unique_labels:
         statistic_info[classes[int(label)]] = (
-            detections[:, -1] == label).sum().item()
+                detections[:, -1] == label).sum().item()
     return statistic_info
 
 
@@ -52,12 +53,12 @@ def draw_rects_and_labels(img, dets, colors, labels, thickness, font_size, font=
             text_size, _ = cv2.getTextSize(
                 labels[i], cv2.FONT_HERSHEY_COMPLEX_SMALL, font_size, 1)
             font_w, font_h = text_size
-            cv2.rectangle(img, (c1[0], max(0, int( c1[1] - 3 - 18 * font_size))),
+            cv2.rectangle(img, (c1[0], max(0, int(c1[1] - 3 - 18 * font_size))),
                           (c1[0] + font_w, max(c1[1], int(3 + 18 * font_size))), colors[cls], -1)
             cv2.putText(img,
                         labels[i],
                         (c1[0], max(c1[1] - 3, font_h)), cv2.FONT_HERSHEY_COMPLEX_SMALL, font_size,
-                        (0, 0, 0), 2)
+                        (0, 0, 0), 1)
     return img
 
 
@@ -79,14 +80,18 @@ def draw_single_img(img, detections, img_size,
             unique_labels = detections[:, -1].unique()
             statistic_info = _get_statistic_info(
                 detections, unique_labels, classes)
-        
+
         if only_rect:
             draw_rects(img, detections, colors, thickness)
         else:
             labels = []
             for detection in detections:
-                labels.append(classes[int(detection[-1])] +
-                              ' (' + str(round(detection[-3] * detection[-2] * 100, 2)) + '%)')
+                if len(detection) == 7:
+                    labels.append(classes[int(detection[-1])] +
+                                  ' (' + str(round(detection[-3] * detection[-2] * 100, 2)) + '%)')
+                else:
+                    labels.append(classes[int(detection[-1])] +
+                                  ' (' + str(round(detection[-2] * 100, 2)) + '%)')
             draw_rects_and_labels(img, detections, colors,
                                   labels, thickness, font_size, font)
 
@@ -168,10 +173,10 @@ class LabelDrawer:
             for detection in detections:
                 if self.id2label is not None and str(int(detection[4])) in self.id2label:
                     label = str(int(detection[4])) + ":" + \
-                        self.id2label[str(int(detection[4]))]
+                            self.id2label[str(int(detection[4]))]
                 else:
                     label = str(int(detection[4])) + ":" + \
-                        self.classes[int(detection[-1])]
+                            self.classes[int(detection[-1])]
                 labels.append(label)
 
             # 绘制所有标签
