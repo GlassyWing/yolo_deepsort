@@ -1,6 +1,6 @@
 # yolo_deepsort
 
-MOT base on yolo3/yolo4+deepsort
+MOT base on yolo3/yolo4+deepsort, different from the official use of numpy to implement sort, the sort here reimplemented with pytorch, so it running at GPU.
 
 ## Mainly dependent
 
