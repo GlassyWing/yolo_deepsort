@@ -32,7 +32,6 @@ class FeatureExtractor(object):
         """
         self.cfg = cfg
         self.parallel = parallel
-        self.is_run_on_cpu = self.cfg.MODEL.DEVICE == "cpu"
 
         if parallel:
             self.num_gpus = torch.cuda.device_count()
@@ -40,14 +39,13 @@ class FeatureExtractor(object):
         else:
             self.predictor = DefaultPredictor(cfg)
 
+        self.input_size = self.cfg.INPUT.SIZE_TEST[::-1]
+
     def _pre_process(self, image):
-        # the model expects RGB inputs
-        original_image = image[:, :, ::-1]
+
         # Apply pre-processing to image.
-        image = cv2.resize(original_image, (64, 128), interpolation=cv2.INTER_LINEAR)
+        image = cv2.resize(image, self.input_size, interpolation=cv2.INTER_LINEAR)
         image = torch.from_numpy(image)
-        if not self.is_run_on_cpu:
-            image = image.cuda()
 
         image = image.float().permute(2, 0, 1)
         return image

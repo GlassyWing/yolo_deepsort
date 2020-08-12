@@ -49,7 +49,11 @@ def rescale_boxes(boxes, current_dim, original_shape):
     return boxes
 
 
-def soft_non_max_suppression(prediction, conf_thres=0.1, iou_thres=0.6, merge=False, classes=None, agnostic=False):
+def soft_non_max_suppression(prediction, conf_thres=0.1, iou_thres=0.6,
+                             merge=False,
+                             classes=None,
+                             agnostic=False,
+                             is_p1p2=False):
     """Performs Non-Maximum Suppression (NMS) on inference results
 
     Returns:
@@ -83,7 +87,10 @@ def soft_non_max_suppression(prediction, conf_thres=0.1, iou_thres=0.6, merge=Fa
         x[:, 5:] *= x[:, 4:5]  # conf = obj_conf * cls_conf
 
         # Box (center x, center y, width, height) to (x1, y1, x2, y2)
-        box = xywh2p1p2(x[:, :4])
+        if not is_p1p2:
+            box = xywh2p1p2(x[:, :4])
+        else:
+            box = x[:, :4]
 
         # Detections matrix nx6 (xyxy, conf, cls)
         if multi_label:
