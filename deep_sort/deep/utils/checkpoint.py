@@ -11,7 +11,6 @@ from typing import Any
 import numpy as np
 import torch
 import torch.nn as nn
-from termcolor import colored
 from torch.nn.parallel import DataParallel, DistributedDataParallel
 
 from deep_sort.deep.utils.file_io import PathManager
@@ -309,7 +308,7 @@ def get_missing_parameters_message(keys: list):
     groups = _group_checkpoint_keys(keys)
     msg = "Some model parameters are not in the checkpoint:\n"
     msg += "\n".join(
-        "  " + colored(k + _group_to_str(v), "blue") for k, v in groups.items()
+        "  " + (k + _group_to_str(v)) for k, v in groups.items()
     )
     return msg
 
@@ -326,7 +325,7 @@ def get_unexpected_parameters_message(keys: list):
     groups = _group_checkpoint_keys(keys)
     msg = "The checkpoint contains parameters not used by the model:\n"
     msg += "\n".join(
-        "  " + colored(k + _group_to_str(v), "magenta")
+        "  " + (k + _group_to_str(v))
         for k, v in groups.items()
     )
     return msg
