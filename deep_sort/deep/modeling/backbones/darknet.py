@@ -125,23 +125,16 @@ class Yolo4TinyDownsample(nn.Module):
         self.down2 = Downsample2()
         self.down3 = Downsample3()
 
-        self.head = nn.Sequential(
-            Conv_Bn_Activation(512, 512, 3, 1),
-            Conv_Bn_Activation(512, 256, 1, 1, with_act=False)
-        )
-
     def forward(self, x):
         x = self.down1(x)
         x = self.down2(x)
         x = self.down3(x)
-        x = self.head(x)
         return x
 
 
 @BACKBONE_REGISTRY.register()
 def build_darknet_backbone(cfg):
     import logging
-    import os
 
     logger = logging.getLogger(__name__)
 
@@ -161,7 +154,23 @@ def build_darknet_backbone(cfg):
 
 
 if __name__ == '__main__':
+
+    class G:
+
+        def __init__(self):
+            self.total = 0
+
+        def __call__(self, module, input, output):
+            self.total += output.shape[1] * output.shape[2] * output.shape[3]
+
+
+    g = G()
+
     model = Yolo4TinyDownsample()
+
+    for name, module in model.named_modules():
+        module.register_forward_hook(g)
+
     image = torch.randn(1, 3, 128, 64)
     output = model(image)
-    print(output.shape)
+    print(g.total)

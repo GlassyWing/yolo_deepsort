@@ -39,7 +39,7 @@ class FeatureExtractor(object):
         else:
             self.predictor = DefaultPredictor(cfg)
 
-        self.input_size = self.cfg.INPUT.SIZE_TEST[::-1]
+        self.input_size = tuple(self.cfg.INPUT.SIZE_TEST[::-1])
 
     def _pre_process(self, image):
 

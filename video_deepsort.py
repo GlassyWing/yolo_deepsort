@@ -14,16 +14,16 @@ if __name__ == '__main__':
     device = "cpu"
 
     # Initialize Darknet.
-    model = Darknet("config/yolov4-tiny.cfg", img_size=(608, 608))
-    model.load_darknet_weights("weights/yolov4-tiny.weights")
+    model = Darknet("config/yolo-obj-3l.cfg", img_size=(608, 608))
+    model.load_darknet_weights("weights/yolo-obj_best.weights")
     model.to(device)
 
     # Initialize FastReid and DeepSort
 
     # Set params for fast-reid
-    cfg = setup_cfg({"config_file": "config/deep/darknet.yml",
+    cfg = setup_cfg({"config_file": "config/deep/config_darknet.yaml",
                      "opts": ["MODEL.WEIGHTS",
-                              "weights/model_final.pth",
+                              "weights/model_darknet.pth",
                               "MODEL.DEVICE",
                               device]})
 
@@ -45,19 +45,19 @@ if __name__ == '__main__':
     #                            max_age=30,
     #                            max_size=8)
 
-    video_detector = VideoDetector(model, "config/coco.names",
+    video_detector = VideoDetector(model, "config/obj.names",
                                    #font_path="font/NotoSansSC-Regular.otf",
                                    #font_size=14,
                                    thickness=2,
                                    skip_frames=1,
-                                   thres=0.2,
+                                   thres=0.18,
                                    class_mask=[0, 2, 4],
                                    nms_thres=0.4,
                                    tracker=tracker,
                                    half=False)
 
     for image, detections, _ in video_detector.detect(
-            0,
+            "E:/projects/python/data/TownCentreXVID.avi",
             # output_path="../data/output.ts",
             real_show=True,
             skip_secs=0):

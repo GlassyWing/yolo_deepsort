@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .build import BACKBONE_REGISTRY
+from deep_sort.deep.modeling.backbones import BACKBONE_REGISTRY
 
 
 class BasicBlock(nn.Module):
@@ -77,9 +77,9 @@ class Net(nn.Module):
         x = self.layer4(x)
         return x
 
-@BACKBONE_REGISTRY.register()
-def build_r18x_backbone(cfg):
 
+# @BACKBONE_REGISTRY.register()
+def build_r18x_backbone(cfg):
     import logging
 
     logger = logging.getLogger(__name__)
@@ -96,3 +96,28 @@ def build_r18x_backbone(cfg):
         )
 
     return model
+
+
+if __name__ == '__main__':
+    class G:
+
+        def __init__(self):
+            self.total = 0
+
+        def __call__(self, module, input, output):
+            self.total += output.shape[1] * output.shape[2] * output.shape[3]
+
+
+    model = Net()
+
+    g = G()
+
+    for name, module in model.named_modules():
+        module.register_forward_hook(g)
+
+
+
+    image = torch.randn(1, 3, 128, 64)
+    output = model(image)
+
+    print(g.total)
