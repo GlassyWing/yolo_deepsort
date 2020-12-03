@@ -213,9 +213,9 @@ class YOLOLayer(nn.Module):
         # (batch, width * height * num_anchor, 5 + num_classes)
         output = torch.cat(
             (
-                pred_boxes.view(num_samples, -1, 4) * self.scale.repeat(1, 2),
-                pred_conf.view((num_samples, -1, 1)),
-                pred_cls.view((num_samples, -1, self.num_classes))
+                pred_boxes.reshape(num_samples, -1, 4) * self.scale.repeat(1, 2),
+                pred_conf.reshape((num_samples, -1, 1)),
+                pred_cls.reshape((num_samples, -1, self.num_classes))
             ),
             -1
         )
